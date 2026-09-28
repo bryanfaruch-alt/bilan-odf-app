@@ -1,6 +1,7 @@
 {
- "version": "1.4",
- "notes": "Test de mise a jour depuis le Dock",
+ "version": "1.5",
+ "notes": "Fiabilisation MAJ (commit fige)",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",

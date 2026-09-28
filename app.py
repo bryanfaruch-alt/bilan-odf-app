@@ -19,7 +19,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "1.4"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "1.5"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2839,9 +2839,14 @@ def _upd_check_bg():
         pass
 
 def _upd_apply(man):
-    """Telecharge tout dans un dossier temporaire PUIS remplace en place (sauvegarde .bak_upd)."""
-    import tempfile, shutil
-    base = man.get("base") or _upd_raw_base()
+    """Telecharge tout dans un dossier temporaire PUIS remplace en place (sauvegarde .bak_upd).
+    Telecharge depuis le COMMIT precis (man['ref']) : URL immuable -> jamais de cache CDN perime."""
+    import tempfile, shutil, re
+    ref = man.get("ref")
+    if ref:
+        base = "https://raw.githubusercontent.com/%s/%s/%s/" % (GH_OWNER_UPD, GH_REPO_UPD, ref)
+    else:
+        base = man.get("base") or _upd_raw_base()
     files = man.get("files") or []
     if not files:
         raise RuntimeError("manifest sans fichiers")
@@ -2857,6 +2862,15 @@ def _upd_apply(man):
             with open(p, "wb") as f:
                 f.write(data)
             got.append(rel)
+        # Verification : la version reellement telechargee doit correspondre a l'annonce
+        vf = os.path.join(tmp, "app.py")
+        want = str(man.get("version", "") or "")
+        if want and os.path.exists(vf):
+            with open(vf, encoding="utf-8", errors="ignore") as f:
+                head = f.read(4000)
+            m = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', head)
+            if m and m.group(1) != want:
+                raise RuntimeError("contenu incoherent (cache CDN) : app.py=%s attendu=%s" % (m.group(1), want))
         for rel in got:
             dst = os.path.join(HERE, rel)
             os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
