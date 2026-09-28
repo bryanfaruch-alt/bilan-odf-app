@@ -1,6 +1,6 @@
 {
  "version": "1.1",
- "notes": "Ajout du numero de version dans le bandeau",
+ "notes": "Ajout du numero de version + correctif MAJ",
  "files": [
   "app.py",
   "run_native.py",

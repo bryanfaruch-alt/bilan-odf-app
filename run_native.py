@@ -570,6 +570,19 @@ def _app_dir():
 def _raw_base():
     return "https://raw.githubusercontent.com/%s/%s/%s/" % (GH_OWNER, GH_REPO, GH_BRANCH)
 
+def _ssl_ctx():
+    """Contexte SSL avec les certificats CA (certifi) — le Python framework macOS
+    n'a pas de CA systeme, sinon 'CERTIFICATE_VERIFY_FAILED'."""
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        try:
+            return ssl.create_default_context()
+        except Exception:
+            return None
+
 def _check_update():
     """Retourne (version_distante, manifest) si une MAJ plus recente existe, sinon None."""
     if not GH_OWNER or getattr(sys, "frozen", False):
@@ -578,7 +591,7 @@ def _check_update():
     url = _raw_base() + "version.json?_=" + str(int(time.time()))
     try:
         req = urllib.request.Request(url, headers={"Cache-Control": "no-cache", "User-Agent": "BilanODF"})
-        with urllib.request.urlopen(req, timeout=3) as r:
+        with urllib.request.urlopen(req, timeout=4, context=_ssl_ctx()) as r:
             man = json.loads(r.read().decode("utf-8"))
     except Exception:
         return None
@@ -597,7 +610,7 @@ def _download_all(man, dest):
     for rel in files:
         u = base + rel + "?_=" + str(int(time.time()))
         req = urllib.request.Request(u, headers={"Cache-Control": "no-cache", "User-Agent": "BilanODF"})
-        with urllib.request.urlopen(req, timeout=40) as r:
+        with urllib.request.urlopen(req, timeout=40, context=_ssl_ctx()) as r:
             data = r.read()
         if not data:
             raise RuntimeError("fichier vide: %s" % rel)
