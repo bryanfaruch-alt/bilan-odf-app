@@ -19,7 +19,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "1.9"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "2.0"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -845,6 +845,22 @@ def diag_inputs(syn):
         h += "</tr>"
     return h + "</table>"
 
+def synth_text_of(pt, r):
+    """Synthèse diagnostique d'un enregistrement en texte simple (courrier / copie / PDF)."""
+    lines = []
+    if (r.get("motif", "") or "").strip(): lines.append("Motif : " + r["motif"].strip())
+    syn = r.get("synthese", {}) or {}
+    for cn, ck in DIAG_COLS:
+        parts = []
+        for rn, rk in DIAG_ROWS:
+            v = str(syn.get(ck + "_" + rk, "") or "").strip()
+            if v: parts.append("%s : %s" % (rn, v))
+        if parts: lines.append("%s — %s" % (cn, " ; ".join(parts)))
+    plan = r.get("plan", {}) or {}
+    if (plan.get("objectifs", "") or "").strip(): lines.append("Objectifs : " + plan["objectifs"].strip())
+    if (plan.get("moyens", "") or "").strip(): lines.append("Moyens : " + plan["moyens"].strip())
+    return "\n".join(lines)
+
 def save_uploads(base, files):
     for key, _ in PHOTO_FIELDS:
         f = files.get("photo_" + key)
@@ -1014,6 +1030,10 @@ html[data-theme=dark] .flash.ok{background:rgba(74,222,128,.12);border-color:rgb
 #totop.on{display:flex}
 #topbarload{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,var(--acc),var(--teal));z-index:99999;box-shadow:0 0 8px rgba(47,107,255,.5)}
 #topbarload.on{width:92%;transition:width 9s cubic-bezier(.1,.6,.2,1)}
+.filedrop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;padding:22px 18px;border:2px dashed var(--line);border-radius:12px;background:var(--card2);cursor:pointer;transition:.15s;color:var(--mut);min-width:240px;flex:1}
+.filedrop:hover{border-color:var(--acc);color:var(--ink)}
+.filedrop.over{border-color:var(--acc);background:var(--accw);color:var(--acc2)}
+.filedrop-t{font-weight:600;font-size:14px;color:var(--ink)}
 .lrow .lrowlink{position:absolute;inset:0;z-index:1;border-radius:12px}
 .lrow>*:not(.lrowlink){position:relative;z-index:2}
 .lrow:hover .lnm{color:var(--acc)}
@@ -1037,6 +1057,7 @@ html[data-theme=dark] .flash.ok{background:rgba(74,222,128,.12);border-color:rgb
       <a href="#" onclick="return plat('doctolib')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Doctolib</a>
       <div class="lbl">Réglages</div>
       <a href="{{url_for('reglages')}}" class="{{'active' if ep=='reglages' else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Réglages</a>
+      <a href="{{url_for('corbeille')}}" class="{{'active' if ep=='corbeille' else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg> Corbeille</a>
       <a href="{{url_for('logout')}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Déconnexion</a>
     </nav>
     <div class="sb-foot">
@@ -1092,6 +1113,49 @@ document.addEventListener('DOMContentLoaded',function(){
   var bar=document.createElement('div');bar.id='topbarload';document.body.appendChild(bar);
   window.addEventListener('scroll',function(){tt.classList.toggle('on',window.scrollY>420);},{passive:true});
 });
+// v2.0 — memoire du dernier onglet patient + reecriture des liens sur la bibliotheque
+(function(){try{
+  var m=location.pathname.match(/^\/patient\/([^\/]+)/);
+  if(m){localStorage.setItem('bilanTab_'+m[1],location.pathname+location.search);}
+  if(location.pathname==='/'){
+    document.querySelectorAll('a[href^="/patient/"]').forEach(function(a){
+      var mm=(a.getAttribute('href')||'').match(/^\/patient\/([^\/]+)/);if(!mm)return;
+      var last=localStorage.getItem('bilanTab_'+mm[1]);if(last)a.setAttribute('href',last);});
+  }
+}catch(e){}})();
+// v2.0 — raccourcis clavier des onglets patient (1-6 et fleches, hors overlays / champs)
+document.addEventListener('keydown',function(e){
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  var tag=(e.target&&e.target.tagName)||'';if(/^(INPUT|TEXTAREA|SELECT)$/.test(tag)||(e.target&&e.target.isContentEditable))return;
+  var ov=['evlb','lbov','pzoom','docov','majModal'].some(function(id){var el=document.getElementById(id);return el&&el.style&&el.style.display&&el.style.display!=='none';});
+  if(ov)return;
+  var tabs=document.querySelectorAll('.ptabs a[data-tabidx]');if(!tabs.length)return;
+  if(e.key>='1'&&e.key<='9'){var idx=parseInt(e.key,10)-1;if(tabs[idx]){e.preventDefault();location.href=tabs[idx].getAttribute('href');}return;}
+  if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
+    var cur=0;tabs.forEach(function(t,i){if(t.getAttribute('data-tabon'))cur=i;});
+    var ni=cur+(e.key==='ArrowRight'?1:-1);if(ni>=0&&ni<tabs.length){e.preventDefault();location.href=tabs[ni].getAttribute('href');}
+  }
+});
+// v2.0 — avertissement si on quitte avec des modifications non enregistrees (form.dirtyguard)
+(function(){var dirty=false;
+  function mark(e){if(e.target&&e.target.closest&&e.target.closest('form.dirtyguard'))dirty=true;}
+  document.addEventListener('input',mark);document.addEventListener('change',mark);
+  document.addEventListener('submit',function(e){if(e.target&&e.target.classList&&e.target.classList.contains('dirtyguard'))dirty=false;});
+  window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue='';}});
+})();
+// v2.0 — autosave des « Notes libres » (debounce a la frappe / au collage)
+(function(){var timers=new Map();
+  function saveNote(f,beacon){var url=f.getAttribute('data-note-url');if(!url)return;var st=f.querySelector('.notestatus');
+    var fd=new FormData(f);
+    if(beacon){try{navigator.sendBeacon(url,fd);}catch(e){}return;}
+    fetch(url,{method:'POST',body:fd}).then(function(r){if(st)st.textContent=r.ok?'Enregistré ✓':'Non enregistré';})
+      .catch(function(){if(st)st.textContent='Non enregistré';});}
+  document.addEventListener('input',function(e){var f=e.target.closest&&e.target.closest('form.notelibre');if(!f)return;
+    var st=f.querySelector('.notestatus');if(st)st.textContent='…';
+    if(timers.get(f))clearTimeout(timers.get(f));timers.set(f,setTimeout(function(){saveNote(f,false);},650));});
+  window.addEventListener('beforeunload',function(){document.querySelectorAll('form.notelibre').forEach(function(f){
+    if(timers.get(f)){saveNote(f,true);}});});
+})();
 // Raccourci « / » -> focus recherche ; Echap -> ferme menus / lightbox / fenetre MAJ
 document.addEventListener('keydown',function(e){
   var tag=(e.target&&e.target.tagName)||'';var typing=/^(INPUT|TEXTAREA|SELECT)$/.test(tag)||(e.target&&e.target.isContentEditable);
@@ -1919,6 +1983,28 @@ def create_empty_record(slug, label):
     pt["records"] = pt.get("records", []) + [rid]; save_patient(slug, pt)
     return rid
 
+@app.route("/record/<slug>/<rid>/duplicate", methods=["POST"])
+def record_duplicate(slug, rid):
+    """Crée une nouvelle réévaluation en reprenant le diagnostic/plan/examen du bilan source (sans les images)."""
+    if not logged(): return redirect(url_for("login"))
+    pt = load_patient(slug); src = load_rec(slug, rid)
+    if not pt or not src: abort(404)
+    new_label = (request.form.get("label", "") or "Réévaluation").strip()
+    nrid = create_empty_record(slug, new_label)
+    nr = load_rec(slug, nrid)
+    for k in ("steiner", "synthese", "exam", "angle", "motif", "plan"):
+        if src.get(k):
+            try: nr[k] = json.loads(json.dumps(src[k]))
+            except Exception: nr[k] = src[k]
+    nr["status"] = "empty"
+    nr["import_note"] = "Base reprise de : %s" % (src.get("label", "") or rid)
+    save_rec(slug, nrid, nr)
+    pt = load_patient(slug)  # rechargement : create_empty_record a déjà ajouté le nouvel enregistrement
+    if pt.get("statut") == "bilan":
+        pt["statut"] = "en_cours"; save_patient(slug, pt)
+    flash("Bilan dupliqué comme base de réévaluation — ajoutez photos, radios et STL, puis régénérez.")
+    return redirect(url_for("record", slug=slug, rid=nrid))
+
 @app.route("/creer_import", methods=["POST"])
 def creer_import():
     if not logged(): return redirect(url_for("login"))
@@ -1981,10 +2067,11 @@ def import_upload(slug, rid):
     <p class=muted>Tu peux importer <b>en plusieurs fois</b> (fichiers dans des dossiers différents) : valide un lot, puis reviens
     en ajouter d'autres — les fichiers déjà rangés sont conservés.</p>
     <form method=post enctype=multipart/form-data onsubmit="this.querySelector('button').innerHTML='<span class=spin></span> Analyse…'">
-      <input type=file name=files multiple style="padding:20px;border:2px dashed #b9c6de;background:#f7f9fd">
+      %s
       <p class=muted style="margin:10px 0 0">Photos (JPG/PNG), radios, modèles <b>STL</b> et bilan <b>Word (.docx)</b> — tu peux tout sélectionner d'un coup.</p>
       <div style="margin-top:14px"><button class=btn>Analyser les fichiers</button></div>
-    </form></div>""" % (url_for("patient", slug=slug), pt["nom"], r.get("label", ""))
+    </form></div>""" % (url_for("patient", slug=slug), pt["nom"], r.get("label", ""),
+        filedrop("files", label="Glissez tous les fichiers ici, ou cliquez"))
     return page(body)
 
 @app.route("/import/<slug>/<rid>/review")
@@ -2160,12 +2247,14 @@ def patient_tabs(slug, active):
             ("staff", "Staff", url_for("staff_page", slug=slug)),
             ("documents", "Documents", url_for("documents_page", slug=slug)),
             ("fiche", "Fiche patient", url_for("patient_edit", slug=slug))]
-    out = '<div style="display:flex;gap:2px;border-bottom:2px solid var(--line);margin:14px 0 18px;flex-wrap:wrap">'
-    for key, lbl, href in tabs:
+    out = '<div class=ptabs style="display:flex;gap:2px;border-bottom:2px solid var(--line);margin:14px 0 18px;flex-wrap:wrap">'
+    for i, (key, lbl, href) in enumerate(tabs):
         on = (key == active)
         stl = ("border-bottom:3px solid var(--acc);color:var(--acc);font-weight:700"
                if on else "color:var(--mut);border-bottom:3px solid transparent")
-        out += '<a href="%s" style="padding:9px 18px;text-decoration:none;margin-bottom:-2px;%s">%s</a>' % (href, stl, lbl)
+        out += ('<a href="%s" data-tabidx="%d"%s title="Onglet %d (touche %d)" '
+                'style="padding:9px 18px;text-decoration:none;margin-bottom:-2px;%s">%s</a>') % (
+            href, i, (" data-tabon=1" if on else ""), i + 1, i + 1, stl, lbl)
     return out + '</div>'
 
 def phead(slug, pt, active):
@@ -2227,15 +2316,28 @@ def patient(slug):
             st, r.get("label", ""), sub, url_for("record", slug=slug, rid=rid),
             url_for("record_setmeta", slug=slug, rid=rid), dcur, lbl,
             url_for("record_delete", slug=slug, rid=rid))
+    _tr = _trashed_records(slug)
+    trash_html = ""
+    if _tr:
+        _tr_rows = "".join(
+            ('<div class=recrow><span class=recdot style="background:#c0392b"></span>'
+             '<div style="flex:1;min-width:0"><div class=recname>%s</div><div class=recsub>%s</div></div>'
+             '<form method=post action="%s" style="margin:0"><button class="btn sec" type=submit>&#8630; Restaurer</button></form></div>')
+            % ((it["label"] or "").replace("<", "&lt;"), it["date"] or "—",
+               url_for("record_restore", slug=slug, rid=it["rid"]))
+            for it in _tr)
+        trash_html = ('<div class=card><details><summary style="cursor:pointer;font-weight:700;color:var(--acc);list-style:none">'
+                      '&#128465; Corbeille du dossier (%d) — restaurer un enregistrement supprimé</summary>'
+                      '<div class=reclist style="margin-top:10px">%s</div></details></div>') % (len(_tr), _tr_rows)
     return page("""%s
     <div class=card><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:10px;flex-wrap:wrap">
     <b>Bilans &amp; réévaluations</b>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <a class="btn sec" href="%s" title="Génère un dossier complet (PDF + Photos/Radios/STL) dans Téléchargements" onclick="return slowGo(this,'G&eacute;n&eacute;ration du dossier… (quelques secondes)')">&#128194; Transfert de dossier</a>
       <a class=btn href="%s">+ Nouvelle réévaluation</a></div></div>
-    <div class=reclist>%s</div></div>""" % (
+    <div class=reclist>%s</div></div>%s""" % (
         phead(slug, pt, "bilans"), url_for("transfert_dossier", slug=slug), url_for("reeval", slug=slug),
-        rows or "<div class=recsub style='padding:12px 4px'>Aucun enregistrement.</div>"), title=pt.get("nom", ""))
+        rows or "<div class=recsub style='padding:12px 4px'>Aucun enregistrement.</div>", trash_html), title=pt.get("nom", ""))
 
 # ======================================================================
 #  TRANSFERT DE DOSSIER : Word complet + dossier brut (zip) -> Téléchargements
@@ -2409,15 +2511,16 @@ def documents_page(slug):
              'document.getElementById("docbody").innerHTML="";}'
              'document.addEventListener("keydown",function(e){if(e.key==="Escape")docClose();});</script>')
     _tpl = ('<div class=card><h2 style="margin-top:0">Ajouter des documents</h2>'
-            '<p class=muted style="margin-top:0">Consentement, courrier d\'adressage, analyse medicale, radio, photo... tout type de fichier.</p>'
-            '<form method=post action="%s" enctype=multipart/form-data style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'
-            '<input type=file name=files multiple required style="flex:1;min-width:240px">'
-            '<button class=btn type=submit onclick="this.innerHTML=\'<span class=spin></span> Ajout...\'">Ajouter</button>'
+            '<p class=muted style="margin-top:0">Consentement, courrier d\'adressage, analyse médicale, radio, photo… tout type de fichier.</p>'
+            '<form method=post action="%s" enctype=multipart/form-data>%s'
+            '<div style="margin-top:12px"><button class=btn type=submit onclick="this.innerHTML=\'<span class=spin></span> Ajout…\'">Ajouter</button></div>'
             '</form></div>'
             '<div class=card><h2 style="margin-top:0">Documents (%d)</h2>%s</div>'
-            ) % (url_for("documents_upload", slug=slug), len(items), rows)
-    body = phead(slug, pt, "documents") + _tpl
-    return page(body)
+            ) % (url_for("documents_upload", slug=slug),
+                 filedrop("files", label="Glissez des documents ici, ou cliquez"), len(items), rows)
+    body = phead(slug, pt, "documents") + _tpl + notes_libres_block(
+        url_for("note_libre", slug=slug), pt.get("libre_documents", ""), key="documents")
+    return page(body, title=pt.get("nom", ""))
 
 @app.route("/patient/<slug>/documents/upload", methods=["POST"])
 def documents_upload(slug):
@@ -2542,17 +2645,40 @@ def _rec_labels(slug, pt):
         out[rid] = r.get("label", "") or ("Bilan initial" if idx == 0 else "Reevaluation %d" % idx)
     return out
 
-def _rec_options_html(slug, pt, checked=None, name="records"):
-    checked = set(checked or [])
-    out = ""
-    for idx, (rid, r) in enumerate(_recs_chrono(slug, pt)):
+def _rec_options_html(slug, pt, checked=None, name="records", sortable=False):
+    chrono = _recs_chrono(slug, pt)
+    meta = {}
+    for idx, (rid, r) in enumerate(chrono):
         lbl = r.get("label", "") or ("Bilan initial" if idx == 0 else "Reevaluation %d" % idx)
         dd = _date_fr(r.get("date", "")) or (r.get("date", "") or "")[:10]
-        ck = " checked" if rid in checked else ""
-        out += ('<label style="display:flex;align-items:center;gap:9px;padding:8px 4px;border-bottom:1px solid var(--line);cursor:pointer">'
-                '<input type=checkbox name=%s value="%s"%s style="width:auto">'
-                '<span><b>%s</b> <span class=muted>&middot; %s</span></span></label>') % (name, rid, ck, _hesc(lbl), dd)
-    return out or '<div class=muted>Aucun temps enregistré.</div>'
+        meta[rid] = (lbl, dd)
+    checked_list = list(checked or [])
+    checked_set = set(checked_list)
+    # ordre d'affichage : d'abord les temps cochés dans l'ordre mémorisé, puis le reste en chrono
+    if sortable and checked_list:
+        order = [rid for rid in checked_list if rid in meta] + [rid for rid, _r in chrono if rid not in checked_set]
+    else:
+        order = [rid for rid, _r in chrono]
+    handle = ('<span class=sorthandle draggable=true title="Glisser pour réordonner" '
+              'style="cursor:grab;color:var(--mut);font-size:16px;line-height:1;user-select:none">&#8942;&#8942;</span>') if sortable else ""
+    rows = ""
+    for rid in order:
+        if rid not in meta: continue
+        lbl, dd = meta[rid]
+        ck = " checked" if rid in checked_set else ""
+        rows += ('<label class=sortit style="display:flex;align-items:center;gap:9px;padding:8px 4px;border-bottom:1px solid var(--line);cursor:pointer">'
+                 '%s<input type=checkbox name=%s value="%s"%s style="width:auto">'
+                 '<span><b>%s</b> <span class=muted>&middot; %s</span></span></label>') % (handle, name, rid, ck, _hesc(lbl), dd)
+    if not rows:
+        return '<div class=muted>Aucun temps enregistré.</div>'
+    if not sortable:
+        return rows
+    return ('<div class=sortrecs>%s</div>'
+            '<script>(function(){document.querySelectorAll(".sortrecs").forEach(function(c){if(c._sb)return;c._sb=1;var dg=null;'
+            'c.addEventListener("dragstart",function(e){var it=e.target.closest&&e.target.closest(".sortit");if(!it)return;dg=it;setTimeout(function(){it.style.opacity=".4";},0);});'
+            'c.addEventListener("dragend",function(){if(dg){dg.style.opacity="";dg=null;}});'
+            'c.addEventListener("dragover",function(e){if(!dg)return;e.preventDefault();var it=e.target.closest&&e.target.closest(".sortit");if(!it||it===dg)return;'
+            'var r=it.getBoundingClientRect();var after=(e.clientY-r.top)/r.height>0.5;c.insertBefore(dg,after?it.nextSibling:it);});});})();</script>') % rows
 
 EVO_VIEWS = [
     ("exo_face_repos", "Visage au repos", "photo"),
@@ -2714,7 +2840,7 @@ def _evolution_slides(slug, pt, evo_records, evo_views):
 def _staff_form(slug, pt, action, date, records, questions, evo_records, evo_views, submit):
     return ('<form method=post action="%s">'
             '<label>Date</label><input type=date name=date value="%s" style="max-width:220px">'
-            '<label style="margin-top:10px;display:block">Temps a presenter <span class=muted>(dans l\'ordre chronologique)</span></label>'
+            '<label style="margin-top:10px;display:block">Temps a presenter <span class=muted>(coche puis glisse pour réordonner)</span></label>'
             '<div style="border:1px solid var(--line);border-radius:10px;padding:2px 10px;margin-top:4px;max-height:200px;overflow:auto">%s</div>'
             '<label style="margin-top:12px;display:block">Questions a poser <span class=muted>(une par ligne)</span></label>'
             '<textarea name=questions rows=3 style="width:100%%" placeholder="Ex : Faut-il extraire 14/24 ?">%s</textarea>'
@@ -2728,7 +2854,7 @@ def _staff_form(slug, pt, action, date, records, questions, evo_records, evo_vie
             '<div class=muted style="font-size:12px;margin-top:6px">Une diapo d\'evolution par vue s\'ajoutera a la fin. Laisse vide pour ne rien ajouter.</div>'
             '</div></details>'
             '<div style="margin-top:12px"><button class=btn onclick="this.innerHTML=\'<span class=spin></span> ...\'">%s</button></div>'
-            '</form>') % (action, date, _rec_options_html(slug, pt, records), _hesc(questions),
+            '</form>') % (action, date, _rec_options_html(slug, pt, records, sortable=True), _hesc(questions),
                          _rec_options_html(slug, pt, evo_records, name="evo_records"), _view_options_html(evo_views), submit)
 
 @app.route("/patient/<slug>/staff")
@@ -2768,9 +2894,11 @@ def staff_page(slug):
            '<span style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#16324f,#2f5ca8);color:#fff;'
            'display:inline-flex;align-items:center;justify-content:center;font-size:22px;line-height:1">+</span> Nouveau staff</summary>'
            '<div style="margin-top:14px">%s</div></details>') % _staff_form(
-               slug, pt, url_for("staff_add", slug=slug), today, None, "", None, None, "Creer le staff")
+               slug, pt, url_for("staff_add", slug=slug), today, None, "", None, None, "Créer le staff")
     hdr = '<h2 style="margin:0 0 6px">Staffs enregistr\xe9s</h2>'
-    return page(phead(slug, pt, "staff") + add + hdr + cards)
+    notes = notes_libres_block(url_for("note_libre", slug=slug), pt.get("libre_staff", ""), key="staff",
+                               title="Notes libres du staff")
+    return page(phead(slug, pt, "staff") + add + hdr + cards + notes, title=pt.get("nom", ""))
 
 @app.route("/patient/<slug>/staff/add", methods=["POST"])
 def staff_add(slug):
@@ -2830,15 +2958,15 @@ def staff_show(slug, sid):
         _hesc(pt.get("nom", "")), _hesc(dd),
         _hesc(pt.get("dob_court", "")), (" &middot; " + _hesc(age)) if age else "")
     S.append(_sl("", cover))
-    chosen = set(rid for rid in (e.get("records") or []) if rid in pt.get("records", []))
+    valid = set(pt.get("records", []))
+    chosen_order = [rid for rid in (e.get("records") or []) if rid in valid]  # ordre choisi (réordonnable)
     labels = _rec_labels(slug, pt)
     chrono = _recs_chrono(slug, pt)
     initial_rid = chrono[0][0] if chrono else None
-    for rid, _r in chrono:
-        if rid in chosen:
-            r = load_rec(slug, rid)
-            if r: S += _slides_for_record(slug, rid, pt, r, section_label=labels.get(rid),
-                                          is_initial=(rid == initial_rid))
+    for rid in chosen_order:
+        r = load_rec(slug, rid)
+        if r: S += _slides_for_record(slug, rid, pt, r, section_label=labels.get(rid),
+                                      is_initial=(rid == initial_rid))
     S += _evolution_slides(slug, pt, e.get("evo_records"), e.get("evo_views"))
     qtext = _hesc(e.get("questions", "") or "")
     atext = _hesc(e.get("answers", "") or "")
@@ -2849,6 +2977,7 @@ def staff_show(slug, sid):
     S.append(_sl("Questions &amp; r\xe9ponses", qa))
     html = (PRESENT_TPL.replace("__NOM__", pt.get("nom", ""))
             .replace("__BACK__", url_for("staff_page", slug=slug))
+            .replace("__PRESNOTES__", _presnotes_html(pt))
             .replace("__SLIDES__", "".join(S)))
     return html
 
@@ -3712,12 +3841,18 @@ def patient_edit(slug):
       <div class="grid g2" style="margin-top:12px"><div><label>Statut du traitement</label><select name=statut>%s</select></div>
       <div><label>&nbsp;</label><div class=muted style="font-size:13px;padding-top:8px">%s</div></div></div>
       <div style="margin-top:16px"><button class=btn>Enregistrer</button></div></form>
+    <div class=card style="max-width:560px"><h3 style="margin:0 0 8px">Export</h3>
+      <p class=muted style="margin:0 0 10px">Fiche synthétique (identité, statut, dernière synthèse) à imprimer ou joindre.</p>
+      <a class="btn sec" href="%s">&#128196; Exporter la fiche (PDF)</a></div>
     <div class=card style="max-width:560px"><h3 style="margin:0 0 6px;color:#C0392B">Zone sensible</h3>
       <p class=muted style="margin:0 0 10px">Supprimer ce patient le déplace dans une corbeille (récupérable), il n'est pas effacé définitivement.</p>
-      <a class="btn sec" href="%s" style="color:#C0392B" onclick="return confirm('Mettre ce patient &agrave; la corbeille ? (r&eacute;cup&eacute;rable)')">&#128465; Supprimer ce patient</a></div>""" % (
+      <a class="btn sec" href="%s" style="color:#C0392B" onclick="return confirm('Mettre ce patient &agrave; la corbeille ? (r&eacute;cup&eacute;rable)')">&#128465; Supprimer ce patient</a></div>%s""" % (
         phead(slug, pt, "fiche"), nom0.replace('"', "&quot;"), prenom0.replace('"', "&quot;"),
         pt.get("dob", ""), opts, stopts, (treatment_duration_txt(slug, pt) or "—"),
-        url_for("patient_delete", slug=slug)))
+        url_for("fiche_pdf", slug=slug),
+        url_for("patient_delete", slug=slug),
+        notes_libres_block(url_for("note_libre", slug=slug), pt.get("libre_fiche", ""), key="fiche")),
+        title=pt.get("nom", ""))
 
 # ---- changement rapide de statut (depuis la bibliothèque ou l'en-tête) ----
 @app.route("/patient/<slug>/statut/<key>")
@@ -3766,11 +3901,69 @@ def patient_delete(slug):
     nrec = len([1 for rid in pt.get("records", []) if load_rec(slug, rid)])
     return page("""<h1>Supprimer un patient</h1>
     <div class=card><p>Confirmer la suppression de <b>%s</b> (%d enregistrement(s)) ?</p>
-    <p class=muted>Le dossier complet sera déplacé dans une corbeille (dans %s), pas effacé définitivement — récupérable manuellement si besoin.</p>
+    <p class=muted>Le dossier complet sera déplacé dans la corbeille, pas effacé définitivement — restaurable en un clic depuis la <a href="%s">corbeille</a>.</p>
     <form method=post style="display:inline"><button class=btn style="background:#C0392B">Oui, mettre à la corbeille</button></form>
     <a class="btn sec" href="%s">Annuler</a></div>""" % (
         (pt.get("nom", "") or "").replace("<", "&lt;"), nrec,
-        os.path.join("~", "BilanODF_Data", "_corbeille_patients"), url_for("dashboard")))
+        url_for("corbeille"), url_for("dashboard")))
+
+def _trashed_patients():
+    d = os.path.join(DATA, "_corbeille_patients"); out = []
+    if os.path.isdir(d):
+        for name in sorted(os.listdir(d)):
+            fp = os.path.join(d, name)
+            if not os.path.isdir(fp): continue
+            info = {"folder": name, "nom": name, "slug": name, "when": "", "nrec": 0}
+            try:
+                j = json.load(open(os.path.join(fp, "patient.json"), encoding="utf-8"))
+                info["nom"] = j.get("nom", name); info["slug"] = j.get("slug", name)
+                info["nrec"] = len(j.get("records", []) or [])
+            except Exception: pass
+            try: info["when"] = datetime.datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%d/%m/%Y %H:%M")
+            except Exception: pass
+            out.append(info)
+    return out
+
+@app.route("/corbeille")
+def corbeille():
+    if not logged(): return redirect(url_for("login"))
+    items = _trashed_patients()
+    rows = ""
+    for it in items:
+        rows += ('<div class=recrow><span class=recdot style="background:#c0392b"></span>'
+                 '<div style="flex:1;min-width:0"><div class=recname>%s</div>'
+                 '<div class=recsub>%d enregistrement(s) &middot; supprimé le %s</div></div>'
+                 '<form method=post action="%s" style="margin:0"><button class="btn sec" type=submit>&#8630; Restaurer</button></form></div>') % (
+            (it["nom"] or "").replace("<", "&lt;"), it["nrec"], it["when"] or "—",
+            url_for("corbeille_restore", folder=it["folder"]))
+    if not rows:
+        rows = '<div class=muted style="padding:20px 4px;text-align:center">La corbeille est vide.</div>'
+    body = ('<p class=muted><a href="%s">&#8592; Bibliothèque</a></p><h1>Corbeille</h1>'
+            '<p class=muted style="margin-top:-4px">Patients supprimés — restaurables en un clic. '
+            'La suppression définitive reste manuelle (dossier BilanODF_Data), rien n\'est effacé automatiquement.</p>'
+            '<div class=card><div class=reclist>%s</div></div>') % (url_for("dashboard"), rows)
+    return page(body, title="Corbeille")
+
+@app.route("/corbeille/restore/<folder>", methods=["POST"])
+def corbeille_restore(folder):
+    if not logged(): return redirect(url_for("login"))
+    d = os.path.join(DATA, "_corbeille_patients")
+    src = os.path.join(d, os.path.basename(folder))
+    if not os.path.isdir(src):
+        flash("Élément introuvable dans la corbeille."); return redirect(url_for("corbeille"))
+    slug = os.path.basename(folder)
+    try: slug = json.load(open(os.path.join(src, "patient.json"), encoding="utf-8")).get("slug", slug)
+    except Exception: pass
+    dest = pdir(slug)
+    if os.path.exists(dest):
+        slug = slug + "_" + secrets.token_hex(3); dest = pdir(slug)
+        try:
+            jp = os.path.join(src, "patient.json"); j = json.load(open(jp, encoding="utf-8"))
+            j["slug"] = slug; json.dump(j, open(jp, "w"), ensure_ascii=False, indent=1)
+        except Exception: pass
+    try: shutil.move(src, dest); flash("Patient restauré.")
+    except Exception as e: flash("Restauration impossible : %s" % e)
+    return redirect(url_for("dashboard"))
 
 # ======================================================================
 #  SUIVI DE TRAITEMENT — journal de séances daté + récap des bilans, état actuel
@@ -4031,7 +4224,8 @@ def suivi(slug):
            ) % (url_for("note_add", slug=slug), today)
     suivi_card = '<div class=card><h2 style="margin:0 0 10px">Suivi</h2>%s%s</div>' % (table, add)
 
-    body = '%s%s%s' % (phead(slug, pt, "suivi"), etat_card, suivi_card)
+    body = '%s%s%s%s' % (phead(slug, pt, "suivi"), etat_card, suivi_card,
+        notes_libres_block(url_for("note_libre", slug=slug), pt.get("libre_suivi", ""), key="suivi"))
     return page(body, title=pt.get("nom", ""))
 
 @app.route("/patient/<slug>/suivi/note/add", methods=["POST"])
@@ -4070,6 +4264,123 @@ def note_delete(slug, eid):
     save_patient(slug, pt); flash("Commentaire supprim\xe9.")
     return redirect(url_for("suivi", slug=slug))
 
+# ---- Notes libres par section (texte libre collable, enregistrement auto) ----
+NOTE_LIBRE_KEYS = {"suivi", "staff", "documents", "fiche"}
+
+def notes_libres_block(save_url, current, key=None, title="Notes libres"):
+    """Bloc pliable « Notes libres » : zone de texte collable + autosave (voir JS dans BASE)."""
+    cur = (current or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    hidden = ('<input type=hidden name=key value="%s">' % key) if key else ""
+    filled = " (contient du texte)" if (current or "").strip() else ""
+    return ('<div class=card style="padding:14px 18px"><details%s>'
+            '<summary style="cursor:pointer;font-weight:700;font-size:14px;color:var(--acc);list-style:none">'
+            '&#128221; %s<span class=muted style="font-weight:500;font-size:12px">%s</span></summary>'
+            '<form class=notelibre data-note-url="%s" style="margin-top:10px">%s'
+            '<textarea name=text rows=5 placeholder="Tapez ou collez votre texte ici… (enregistrement automatique)" '
+            'style="width:100%%;min-height:96px">%s</textarea>'
+            '<div class=muted style="font-size:12px;margin-top:4px">&#128190; <span class=notestatus>Enregistré automatiquement</span></div>'
+            '</form></details></div>') % ((" open" if (current or "").strip() else ""), title, filled, save_url, hidden, cur)
+
+def _presnotes_html(pt):
+    """Notes du présentateur affichées en présentation = notes libres du staff du patient."""
+    t = (pt.get("libre_staff", "") or "").strip()
+    if not t:
+        return "Aucune note. Ajoutez-en dans l'onglet Staff du patient (« Notes libres du staff »)."
+    return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+def filedrop(name="files", accept="", multiple=True, label="Glissez vos fichiers ici, ou cliquez pour parcourir"):
+    """Zone de dépôt (drag & drop) enveloppant un input file, avec retour visuel. JS inline autonome."""
+    mid = "fd" + secrets.token_hex(3)
+    acc = (' accept="%s"' % accept) if accept else ""
+    mult = " multiple" if multiple else ""
+    tpl = ('<label class=filedrop id="@ID@_l">'
+           '<input type=file name="@NAME@"@ACC@@MULT@ style="display:none" '
+           'onchange="var t=document.getElementById(\'@ID@_t\');t.textContent=this.files.length?this.files.length+\' fichier(s) prêt(s)\':\'@LBL@\';">'
+           '<div style="font-size:30px;line-height:1">&#128228;</div>'
+           '<div id="@ID@_t" class=filedrop-t>@LBL@</div>'
+           '<div class=muted style="font-size:12px;margin-top:2px">ou cliquez pour choisir</div></label>'
+           '<script>(function(){var l=document.getElementById("@ID@_l"),i=l.querySelector("input"),t=document.getElementById("@ID@_t");'
+           '["dragenter","dragover"].forEach(function(ev){l.addEventListener(ev,function(e){e.preventDefault();e.stopPropagation();l.classList.add("over");});});'
+           'l.addEventListener("dragleave",function(e){if(!l.contains(e.relatedTarget))l.classList.remove("over");});'
+           'l.addEventListener("drop",function(e){e.preventDefault();e.stopPropagation();l.classList.remove("over");'
+           'if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length){try{i.files=e.dataTransfer.files;}catch(_){}'
+           't.textContent=i.files.length+" fichier(s) prêt(s)";}});})();</script>')
+    return (tpl.replace("@ID@", mid).replace("@NAME@", name)
+               .replace("@ACC@", acc).replace("@MULT@", mult).replace("@LBL@", label))
+
+@app.route("/patient/<slug>/note_libre", methods=["POST"])
+def note_libre(slug):
+    if not logged(): return ("non connecte", 403)
+    pt = load_patient(slug)
+    if not pt: return ("introuvable", 404)
+    key = request.form.get("key", "")
+    if key not in NOTE_LIBRE_KEYS: return ("cle invalide", 400)
+    pt["libre_" + key] = request.form.get("text", "")
+    save_patient(slug, pt)
+    return "ok"
+
+@app.route("/record/<slug>/<rid>/note_libre", methods=["POST"])
+def record_note_libre(slug, rid):
+    if not logged(): return ("non connecte", 403)
+    r = load_rec(slug, rid)
+    if not r: return ("introuvable", 404)
+    r["libre"] = request.form.get("text", "")
+    save_rec(slug, rid, r)
+    return "ok"
+
+@app.route("/patient/<slug>/fiche_pdf")
+def fiche_pdf(slug):
+    """Export d'une fiche patient synthétique en PDF (identité + statut + synthèse du dernier bilan)."""
+    if not logged(): return redirect(url_for("login"))
+    pt = load_patient(slug)
+    if not pt: abort(404)
+    import io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    recs = sorted([(rid, load_rec(slug, rid)) for rid in pt.get("records", [])],
+                  key=lambda x: (x[1] or {}).get("date", ""), reverse=True)
+    latest = next((r for _rid, r in recs if r), None)
+    ss = getSampleStyleSheet()
+    NAVY = colors.HexColor("#16324f")
+    H1 = ParagraphStyle("H1", parent=ss["Title"], fontSize=19, textColor=NAVY, spaceAfter=2)
+    SUB = ParagraphStyle("SUB", parent=ss["Normal"], fontSize=10.5, textColor=colors.HexColor("#6b7280"), spaceAfter=10)
+    H2 = ParagraphStyle("H2", parent=ss["Heading2"], fontSize=13, textColor=NAVY, spaceBefore=8, spaceAfter=4)
+    BODY = ParagraphStyle("BODY", parent=ss["Normal"], fontSize=11, leading=16)
+    def esc(x): return (str(x or "")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    age = age_at(pt.get("dob", ""), datetime.date.today().isoformat()) or (pt.get("age", "") or "")
+    stat_lbl = STATUT_MAP.get(statut_of(pt), ("", "", ""))[0]
+    dur = treatment_duration_txt(slug, pt)
+    story = [Paragraph("Fiche patient", H1), Paragraph(esc(pt.get("nom", "")), SUB)]
+    ident = []
+    _dob = pt.get("dob_court", "") or pt.get("dob", "")
+    if pt.get("sexe"): ident.append("Sexe : %s" % esc(pt["sexe"]))
+    if _dob: ident.append("Né(e) : %s%s" % (esc(_dob), (" (%s)" % esc(age) if age else "")))
+    if stat_lbl: ident.append("Statut : %s" % esc(stat_lbl))
+    if dur: ident.append("Durée de traitement : %s" % esc(dur))
+    if pt.get("tel"): ident.append("Tél : %s" % esc(pt["tel"]))
+    if pt.get("email"): ident.append("Email : %s" % esc(pt["email"]))
+    story.append(Paragraph("<br/>".join(ident) or "—", BODY))
+    if latest:
+        story.append(Paragraph("Synthèse — %s" % esc(latest.get("label", "") or "dernier bilan"), H2))
+        st = synth_text_of(pt, latest)
+        story.append(Paragraph(esc(st).replace("\n", "<br/>") if st.strip() else "Non renseignée.", BODY))
+    if (pt.get("libre_fiche", "") or "").strip():
+        story.append(Paragraph("Notes", H2))
+        story.append(Paragraph(esc(pt["libre_fiche"]).replace("\n", "<br/>"), BODY))
+    story.append(Spacer(1, 14))
+    story.append(Paragraph("Document généré localement par Bilan ODF le %s — données confidentielles."
+                           % datetime.date.today().strftime("%d/%m/%Y"),
+                           ParagraphStyle("F", parent=ss["Normal"], fontSize=8, textColor=colors.HexColor("#9aa4b2"))))
+    buf = io.BytesIO()
+    SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=16 * mm,
+                      leftMargin=18 * mm, rightMargin=18 * mm, title="Fiche patient").build(story)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/pdf", as_attachment=True,
+                     download_name="Fiche_%s.pdf" % _safe_name(pt.get("nom", "patient")))
+
 # ---- gestion d'un enregistrement : date/libellé + suppression (corbeille) ----
 @app.route("/record/<slug>/<rid>/setmeta", methods=["POST"])
 def record_setmeta(slug, rid):
@@ -4103,10 +4414,48 @@ def record_delete(slug, rid):
         return redirect(url_for("patient", slug=slug))
     return page("""<h1>Supprimer un enregistrement</h1>
     <div class=card><p>Confirmer la suppression de <b>%s</b> (%s) ?</p>
-    <p class=muted>Il sera déplacé dans une corbeille (récupérable dans le dossier du patient), pas effacé définitivement.</p>
+    <p class=muted>Il sera déplacé dans une corbeille (restaurable en un clic depuis la fiche du patient), pas effacé définitivement.</p>
     <form method=post style="display:inline"><button class=btn style="background:#C0392B">Oui, mettre à la corbeille</button></form>
     <a class="btn sec" href="%s">Annuler</a></div>""" % (
         r.get("label", ""), r.get("date", "")[:10], url_for("patient", slug=slug)))
+
+def _trashed_records(slug):
+    d = os.path.join(pdir(slug), "_corbeille"); out = []
+    if os.path.isdir(d):
+        for name in sorted(os.listdir(d), reverse=True):
+            fp = os.path.join(d, name)
+            if not os.path.isdir(fp): continue
+            info = {"rid": name, "label": name, "date": ""}
+            try:
+                m = json.load(open(os.path.join(fp, "meta.json"), encoding="utf-8"))
+                info["label"] = m.get("label", name); info["date"] = (m.get("date", "") or "")[:10]
+            except Exception: pass
+            out.append(info)
+    return out
+
+@app.route("/patient/<slug>/record/<rid>/restore", methods=["POST"])
+def record_restore(slug, rid):
+    if not logged(): return redirect(url_for("login"))
+    pt = load_patient(slug)
+    if not pt: abort(404)
+    src = os.path.join(pdir(slug), "_corbeille", os.path.basename(rid))
+    if not os.path.isdir(src):
+        flash("Enregistrement introuvable dans la corbeille."); return redirect(url_for("patient", slug=slug))
+    newrid = rid; dest = rdir(slug, newrid)
+    if os.path.exists(dest):
+        newrid = rid + "_r" + secrets.token_hex(2); dest = rdir(slug, newrid)
+        try:
+            mp = os.path.join(src, "meta.json"); m = json.load(open(mp, encoding="utf-8"))
+            m["rid"] = newrid; json.dump(m, open(mp, "w"), ensure_ascii=False, indent=1)
+        except Exception: pass
+    try:
+        shutil.move(src, dest)
+        if newrid not in pt.get("records", []):
+            pt["records"] = pt.get("records", []) + [newrid]; save_patient(slug, pt)
+        flash("Enregistrement restauré.")
+    except Exception as e:
+        flash("Restauration impossible : %s" % e)
+    return redirect(url_for("patient", slug=slug))
 
 # ======================================================================
 #  RÉGLAGES
@@ -4735,6 +5084,8 @@ def record(slug, rid):
            '<a class="btn sec" href="%s" onclick="return slowGo(this,\'R&eacute;g&eacute;n&eacute;ration\\u2026\')">&#128260; R&eacute;g&eacute;n&eacute;rer</a> '
            '<a class="btn sec" href="%s">&#128193; Ouvrir le dossier</a> <a class="btn sec" href="%s">&#128200; &Eacute;volution</a>') % (
         url_for("import_upload", slug=slug, rid=rid), url_for("record_word_values", slug=slug, rid=rid), url_for("regen", slug=slug, rid=rid), url_for("openfolder", slug=slug, rid=rid), url_for("evolution", slug=slug))
+    dl += ('<form method=post action="%s" style="display:inline" onsubmit="return confirm(\'Créer une nouvelle réévaluation en reprenant le diagnostic et le plan de ce bilan ? (les photos/radios/STL restent à ajouter)\')">'
+           '<button class="btn sec" type=submit title="Nouvelle réévaluation pré-remplie à partir de ce bilan">&#10133; Dupliquer en réévaluation</button></form> ') % url_for("record_duplicate", slug=slug, rid=rid)
     # 1) PHOTOS — emplacements de vues (déposer/assigner) + galerie + visionneuse
     PLBL = dict(PHOTO_FIELDS)
     VIEW_LINES = [("exo_face_repos", "exo_face_sourire", "exo_profil"),
@@ -4927,7 +5278,7 @@ def record(slug, rid):
                   '<a class="btn sec" href="%s">🦷 Ouvrir le suivi de traitement</a> '
                   '<a class="btn sec" href="%s">✉️ Courrier au correspondant</a></div>') % (url_for("suivi", slug=slug), url_for("courrier", slug=slug, rid=rid))
 
-    form = ('<form method=post action="%s" enctype=multipart/form-data onsubmit="this.querySelector(\'button[type=submit]\').innerHTML=\'<span class=spin></span> Enregistrement...\'">'
+    form = ('<form method=post action="%s" enctype=multipart/form-data class=dirtyguard onsubmit="this.querySelector(\'button[type=submit]\').innerHTML=\'<span class=spin></span> Enregistrement...\'">'
       '<div class=card id=steiner><h2 style="margin:0 0 6px">Analyse radiographique (Steiner)</h2>%s'
         '<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600;color:var(--acc)">Modifier les valeurs de la céphalométrie</summary>'
         '<div class="grid g3" style="margin-top:10px">%s</div></details></div>'
@@ -4964,22 +5315,73 @@ def record(slug, rid):
                     '<form method=post action="%s" style="margin:0;position:absolute;top:8px;right:8px"><button type=submit title="Supprimer ce tracé" onclick="return confirm(\'Supprimer ce tracé céphalométrique ?\')" style="width:30px;height:30px;border:none;border-radius:8px;background:rgba(200,40,40,.9);color:#fff;font-size:17px;line-height:1;cursor:pointer">&times;</button></form></div>')
                     % (_tsrc, url_for("record_trace_delete", slug=slug, rid=rid, name=_tf)))
     trace_html = "".join(_tcells) if _tcells else "<span class=muted>-</span>"
+    # --- Complétude du bilan : ce qui est présent / manquant (coup d'œil avant staff) ---
+    def _any_jpg(sub):
+        d = os.path.join(base, sub)
+        try: return any(f.lower().endswith((".jpg", ".jpeg", ".png")) for f in os.listdir(d))
+        except Exception: return False
+    _has_photos = _any_jpg("02_photos_traitees") or _any_jpg("01_photos_brutes")
+    _has_radio = ex_("03_radios/panoramique.jpg") or ex_("03_radios/teleradiographie_profil.jpg")
+    _has_stl = _any_jpg("05_stl_rendus") or (os.path.isdir(os.path.join(base, "04_empreintes")) and any(
+        f.lower().endswith(".stl") for f in (os.listdir(os.path.join(base, "04_empreintes")) if os.path.isdir(os.path.join(base, "04_empreintes")) else [])))
+    _has_steiner = bool(r.get("steiner"))
+    _syn = r.get("synthese", {}) or {}
+    _has_synth = any((str(v).strip() for v in _syn.values())) or bool((r.get("motif", "") or "").strip())
+    _ck_items = [("Photos", _has_photos), ("Radiographies", _has_radio), ("Modèles 3D", _has_stl),
+                 ("Analyse Steiner", _has_steiner), ("Synthèse / motif", _has_synth)]
+    _ck_done = sum(1 for _l, v in _ck_items if v)
+    def _ckpill(lbl, ok):
+        col = "#1a6b39" if ok else "#c0392b"; bg = "#e9f7ec" if ok else "#fdecea"; mk = "✓" if ok else "✗"
+        return ('<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;'
+                'background:%s;color:%s;font-size:13px;font-weight:600;margin:0 6px 6px 0">%s %s</span>') % (bg, col, mk, lbl)
+    _ck_bar = ('<div style="height:7px;border-radius:6px;background:var(--line);overflow:hidden;max-width:220px;margin:2px 0 12px">'
+               '<div style="height:100%%;width:%d%%;background:%s"></div></div>') % (
+        int(_ck_done * 100 / len(_ck_items)), "#1a6b39" if _ck_done == len(_ck_items) else "var(--acc)")
+    _checklist = ('<div class=card><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+                  '<h2 style="margin:0">Complétude du bilan</h2>'
+                  '<span class=muted style="font-size:13px">%d / %d éléments présents</span></div>%s<div>%s</div></div>') % (
+        _ck_done, len(_ck_items), _ck_bar, "".join(_ckpill(l, v) for l, v in _ck_items))
+    # --- Synthèse en texte (copiable pour un courrier) ---
+    _st_lines = []
+    if (r.get("motif", "") or "").strip(): _st_lines.append("Motif : " + r["motif"].strip())
+    for _cn, _ck in DIAG_COLS:
+        _parts = []
+        for _rn, _rk in DIAG_ROWS:
+            _v = str(_syn.get(_ck + "_" + _rk, "") or "").strip()
+            if _v: _parts.append("%s : %s" % (_rn, _v))
+        if _parts: _st_lines.append("%s — %s" % (_cn, " ; ".join(_parts)))
+    _plan = r.get("plan", {}) or {}
+    if (_plan.get("objectifs", "") or "").strip(): _st_lines.append("Objectifs : " + _plan["objectifs"].strip())
+    if (_plan.get("moyens", "") or "").strip(): _st_lines.append("Moyens : " + _plan["moyens"].strip())
+    _synth_text = (("Synthèse — %s (%s)\n" % (pt.get("nom", ""), r.get("label", "") or "")) + "\n".join(_st_lines)) if _st_lines else ""
+    _copybtn = ""
+    if _synth_text:
+        _esc = _synth_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        _copybtn = ('<textarea id=synthsrc readonly style="position:absolute;left:-9999px;top:0">%s</textarea>'
+                    '<button type=button class="btn sec sm" onclick="return copyVal(document.getElementById(\'synthsrc\').value)" '
+                    'title="Copier la synthèse pour la coller dans un courrier">&#128203; Copier la synth&egrave;se</button>') % _esc
+    _statctrl = ('<span style="font-size:13px;color:var(--mut)">Statut&nbsp;:</span> %s' % status_menu(slug, pt))
     body = ("%s<p class=muted><a href=\"%s\">&#8592; %s</a></p>"
       "<h1>%s <span class=tag>%s</span></h1><h2>%s &middot; %s &middot; %s</h2>"
-      "<div class=card>%s</div>"
+      "<div style=\"display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-4px 0 14px\">%s%s</div>"
+      "<div class=card>%s</div>%s"
       "<div class=\"card cardphotos\"><h2>Photos</h2>%s</div>"
       "<div class=card><div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:14px\"><h2 style=margin:0>Mod&egrave;les 3D</h2>%s</div>%s</div>"
       "%s%s"
       "<div class=card><h2>Radiographies</h2><div class=\"grid g2\">%s</div></div>"
       "<div class=card id=trace><h2>Tracé céphalométrique</h2><div class=\"grid g2\">%s</div></div>"
       "<div class=card id=odonto><h2>Odontogramme</h2>%s</div>"
-      "%s") % (
+      "%s%s") % (
         banner, url_for("patient", slug=slug), pt["nom"], pt["nom"], r.get("label", ""),
         pt["age"], pt["sexe"], r.get("date", "")[:16].replace("T", " "),
-        dl, photos_html or "<span class=muted>-</span>",
+        _statctrl, _copybtn,
+        dl, _checklist,
+        photos_html or "<span class=muted>-</span>",
         stl_ctrl, stl_body,
         cap_html, gal_html,
-        rad or "<span class=muted>-</span>", trace_html, odonto_card(slug, rid, r), form)
+        rad or "<span class=muted>-</span>", trace_html, odonto_card(slug, rid, r), form,
+        notes_libres_block(url_for("record_note_libre", slug=slug, rid=rid), r.get("libre", ""),
+                           title="Notes libres du bilan"))
     return page(body, wide=True, title="%s — %s" % (pt.get("nom", ""), r.get("label", "") or "dossier"))
 
 @app.route("/record/<slug>/<rid>/trace_delete/<name>", methods=["POST"])
@@ -6291,8 +6693,15 @@ body{background:radial-gradient(1400px 900px at 50% -12%,#17223a 0%,#0d1220 46%,
 <div id=topbar>
   <span class=nm>__NOM__</span>
   <span class=sp></span>
+  <button id=ptimer onclick="tTog()" title="Minuteur — clic : départ / pause" style="font-variant-numeric:tabular-nums;min-width:66px">00:00</button>
+  <button onclick="tRst()" title="Remettre le minuteur à zéro">&#8635;</button>
+  <button onclick="tNotes()" title="Notes du présentateur (touche N)">&#128221; Notes</button>
   <button class=p onclick="togFS()">&#9974; Plein &eacute;cran</button>
   <a href="__BACK__">&times; Quitter</a>
+</div>
+<div id=presnotes style="display:none;position:fixed;right:16px;bottom:52px;width:min(420px,42vw);max-height:56vh;overflow:auto;z-index:55;background:rgba(12,17,28,.95);border:1px solid rgba(120,160,255,.32);border-radius:14px;padding:16px 18px;box-shadow:0 18px 50px rgba(0,0,0,.55);white-space:pre-wrap;line-height:1.5;font-size:15px;color:#e6ecf7">
+  <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#7fa8e6;font-weight:700;margin-bottom:8px">Notes du présentateur</div>
+  <div id=presnotesbody>__PRESNOTES__</div>
 </div>
 __SLIDES__
 <button class="nav l" onclick="prev()">&#8249;</button>
@@ -6314,14 +6723,23 @@ function togFS(){if(document.fullscreenElement){document.exitFullscreen();}
   else if(document.documentElement.requestFullscreen){document.documentElement.requestFullscreen();}}
 function zoom(img){var o=document.getElementById('pzoom');o.querySelector('img').src=img.src;o.style.display='flex';}
 function unzoom(){document.getElementById('pzoom').style.display='none';}
+/* Minuteur de présentation */
+var _tS=0,_tRun=false,_tIv=null;
+function _tFmt(s){var m=Math.floor(s/60),ss=s%60;return (m<10?'0':'')+m+':'+(ss<10?'0':'')+ss;}
+function _tTick(){_tS++;var el=document.getElementById('ptimer');if(el)el.textContent=_tFmt(_tS);}
+function tTog(){_tRun=!_tRun;var el=document.getElementById('ptimer');if(_tRun){_tIv=setInterval(_tTick,1000);if(el)el.style.color='#57d98a';}else{clearInterval(_tIv);if(el)el.style.color='';}}
+function tRst(){clearInterval(_tIv);_tRun=false;_tS=0;var el=document.getElementById('ptimer');if(el){el.textContent='00:00';el.style.color='';}}
+function tNotes(){var n=document.getElementById('presnotes');if(n)n.style.display=(n.style.display==='none'||!n.style.display)?'block':'none';}
 document.addEventListener('keydown',function(e){
   var _ae=document.activeElement;
   if(_ae&&(_ae.tagName==='TEXTAREA'||_ae.tagName==='INPUT')){if(e.key==='Escape')_ae.blur();return;}
   if(document.getElementById('pzoom').style.display==='flex'){if(e.key==='Escape')unzoom();return;}
   if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();next();}
   else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prev();}
-  else if(e.key==='Escape'){if(document.fullscreenElement){document.exitFullscreen();}else{location.href=BACK;}}
-  else if(e.key==='f'||e.key==='F'){togFS();}});
+  else if(e.key==='Escape'){var pn=document.getElementById('presnotes');if(pn&&pn.style.display==='block'){pn.style.display='none';return;}if(document.fullscreenElement){document.exitFullscreen();}else{location.href=BACK;}}
+  else if(e.key==='f'||e.key==='F'){togFS();}
+  else if(e.key==='n'||e.key==='N'){tNotes();}
+  else if(e.key==='t'||e.key==='T'){tTog();}});
 /* --- Enregistrement automatique generique (diapos editables : Q/R, plan) --- */
 (function(){
   var timers=new WeakMap();
@@ -6440,6 +6858,7 @@ def presentation(slug, rid):
     slides_html = "".join(S)
     html = (PRESENT_TPL.replace("__NOM__", pt.get("nom", ""))
             .replace("__BACK__", url_for("record", slug=slug, rid=rid))
+            .replace("__PRESNOTES__", _presnotes_html(pt))
             .replace("__SLIDES__", slides_html))
     return html
 
