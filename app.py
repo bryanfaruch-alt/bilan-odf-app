@@ -1056,14 +1056,16 @@ document.addEventListener('click',function(e){document.querySelectorAll('details
   </div>
 </div>
 <script>
-(function(){try{fetch('/maj/state').then(function(r){return r.json();}).then(function(d){
-  if(d&&d.version){var t=document.getElementById('majTxt');
+(function(){var tries=0;function show(d){var t=document.getElementById('majTxt');
     var s='Une nouvelle version (v'+d.version+') de Bilan ODF est disponible';
     if(d.current)s+=' (vous avez la v'+d.current+')';s+='.';
     if(d.notes)s+='\n\n'+d.notes;
     s+='\n\nInstaller maintenant et relancer l\'application ?';
     t.textContent=s;document.getElementById('majModal').style.display='flex';}
-}).catch(function(){});}catch(e){}})();
+  function chk(){fetch('/maj/state').then(function(r){return r.json();}).then(function(d){
+    if(d&&d.version){show(d);} else if(tries++<8){setTimeout(chk,3000);}
+  }).catch(function(){if(tries++<8)setTimeout(chk,3000);});}
+  try{chk();}catch(e){}})();
 window.majLater=function(){document.getElementById('majModal').style.display='none';};
 window.majApply=function(btn){btn.disabled=true;var m=document.getElementById('majMsg');m.style.display='block';m.textContent='Téléchargement et installation...';
   fetch('/maj/apply',{method:'POST'}).then(function(r){return r.text();}).then(function(t){
