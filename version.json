@@ -1,7 +1,7 @@
 {
- "version": "1.7",
- "notes": "Confirmations avant suppression, retouche photo plus claire (au survol), finitions",
- "ref": "c90463e9f9803ebd0033247104b334fec0dec132",
+ "version": "1.8",
+ "notes": "Retour visuel sur les actions longues, accents corriges, boutons du dossier plus clairs",
+ "ref": "f2f8b1e4338eccfa757bbda79e08bc2d78a9a58e",
  "files": [
   "app.py",
   "run_native.py",
