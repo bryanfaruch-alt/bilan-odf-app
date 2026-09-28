@@ -19,7 +19,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "1.8"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "1.9"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -859,7 +859,7 @@ def save_uploads(base, files):
 # ======================================================================
 LOGO_URI = "data:image/png;base64,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"
 BASE = """<!doctype html><html lang=fr><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1"><title>Bilan ODF</title><script>(function(){try{var t=localStorage.getItem('bilan-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script><style>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>{% if page_title %}{{ page_title }} · {% endif %}Bilan ODF</title><script>(function(){try{var t=localStorage.getItem('bilan-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script><style>
 :root{--bg:#f4f6f9;--card:#ffffff;--card2:#f8fafc;--ink:#0c1526;--ink2:#3a475c;--mut:#6b7891;--acc:#2f6bff;--acc2:#1c4fd6;--accw:#eaf1ff;--teal:#3cc0c8;
 --line:#e7ebf1;--line2:#eef1f6;--ok:#169d5b;--bad:#d9483f;
 --sb:#ffffff;--sb1:#ffffff;--sb2:#ffffff;--sb-ink:#3a475c;--sb-mut:#6b7891;
@@ -998,6 +998,25 @@ table.st{width:100%;border-collapse:collapse}table.st td{padding:6px 8px;border-
 .loginwrap .card h1{text-align:center}.loginwrap .card h2{text-align:center;color:var(--mut);font-weight:600}
 .loginwrap .btn{width:100%;justify-content:center;height:46px;font-size:15px;margin-top:6px}
 @media(max-width:820px){.sidebar{display:none}.g4{grid-template-columns:1fr 1fr}}
+/* ===== v1.9 : retours visuels & confort ===== */
+.btn.danger{background:var(--bad);color:#fff;box-shadow:none}
+.btn.danger:hover{filter:brightness(1.07)}
+.btn.sec.danger{background:var(--card);color:var(--bad);border:1px solid #f0c4bd}
+html[data-theme=dark] .btn.sec.danger{border-color:#5a2b28}
+.btn.sec.danger:hover{background:rgba(217,72,63,.08);border-color:var(--bad);filter:none}
+.flash.ok{background:#e9f7ec;border-color:#bfe3c6;color:#1a6b39}
+html[data-theme=dark] .flash.ok{background:rgba(74,222,128,.12);border-color:rgba(74,222,128,.4);color:#8ff0b0}
+.flash.fade{opacity:0;transition:opacity .5s;pointer-events:none}
+.crumb{font-size:12.5px;color:var(--mut);margin:0 0 8px}
+.crumb a{color:var(--mut)}.crumb a:hover{color:var(--acc)}.crumb .sep{margin:0 7px;opacity:.6}
+#totop{position:fixed;right:22px;bottom:22px;width:44px;height:44px;border-radius:50%;background:var(--acc);color:#fff;border:0;display:none;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(47,107,255,.35);cursor:pointer;z-index:9996;font-size:22px;line-height:1}
+#totop:hover{filter:brightness(1.08)}
+#totop.on{display:flex}
+#topbarload{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,var(--acc),var(--teal));z-index:99999;box-shadow:0 0 8px rgba(47,107,255,.5)}
+#topbarload.on{width:92%;transition:width 9s cubic-bezier(.1,.6,.2,1)}
+.lrow .lrowlink{position:absolute;inset:0;z-index:1;border-radius:12px}
+.lrow>*:not(.lrowlink){position:relative;z-index:2}
+.lrow:hover .lnm{color:var(--acc)}
 </style></head><body>
 {% if session.get('user') %}
 {% set ep=request.endpoint %}
@@ -1011,11 +1030,11 @@ table.st{width:100%;border-collapse:collapse}table.st td{padding:6px 8px;border-
       <a href="{{url_for('import_massif')}}" class="{{'active' if ep and ('massif' in ep or ep=='word_import') else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Importer patient / bilan (Word)</a>
       <a href="{{url_for('appareils_home')}}" class="{{'active' if ep and ep.startswith('appareil') else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8v2a8 8 0 0 0 16 0V8"/><path d="M4 10h16"/><path d="M8 10v2M12 10v3M16 10v2"/></svg> Appareils</a>
       <div class="lbl">Applications tierces</div>
-      <a href="#" onclick="try{window.webkit.messageHandlers.bilan.postMessage('open_xero')}catch(e){}; return false;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M4.5 8h15M4.5 16h15"/></svg> XERO</a>
-      <a href="#" onclick="try{window.webkit.messageHandlers.bilan.postMessage('open_webceph')}catch(e){}; return false;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V6a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2z"/><circle cx="11" cy="12" r="3"/></svg> WebCeph</a>
+      <a href="#" onclick="return plat('xero')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M4.5 8h15M4.5 16h15"/></svg> XERO</a>
+      <a href="#" onclick="return plat('webceph')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V6a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2z"/><circle cx="11" cy="12" r="3"/></svg> WebCeph</a>
       <a href="{{url_for('radios')}}" class="{{'active' if ep=='radios' else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="8" y1="4" x2="8" y2="20"/><line x1="16" y1="4" x2="16" y2="20"/></svg> Radios &amp; tracés</a>
       <a href="{{url_for('steiner_queue')}}" class="{{'active' if ep=='steiner_queue' else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 8l-5 5-3-3-4 4"/></svg> Analyses Steiner</a>
-      <a href="#" onclick="try{window.webkit.messageHandlers.bilan.postMessage('open_doctolib')}catch(e){}; return false;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Doctolib</a>
+      <a href="#" onclick="return plat('doctolib')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Doctolib</a>
       <div class="lbl">Réglages</div>
       <a href="{{url_for('reglages')}}" class="{{'active' if ep=='reglages' else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Réglages</a>
       <a href="{{url_for('logout')}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Déconnexion</a>
@@ -1038,7 +1057,10 @@ table.st{width:100%;border-collapse:collapse}table.st td{padding:6px 8px;border-
 {% else %}
 <div class="loginwrap"><div style="width:400px;max-width:100%">{% with m=get_flashed_messages() %}{% if m %}<div class=flash>{{m|join(' · ')}}</div>{% endif %}{% endwith %}{{body|safe}}</div></div>
 {% endif %}
-<script>function openPlat(which,el,ev){if(ev){ev.preventDefault();ev.stopPropagation();}var nom=(el&&el.getAttribute('data-nom'))||'';try{window.webkit.messageHandlers.bilan.postMessage('open_'+which+':'+nom);}catch(e){}return false;}
+<script>function _hasBridge(){try{return !!(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.bilan);}catch(e){return false;}}
+function _platWarn(){try{okToast('À ouvrir depuis l’application Bilan ODF');}catch(e){alert('Cette fonction s’ouvre depuis l’application Bilan ODF (fenêtre intégrée).');}}
+function openPlat(which,el,ev){if(ev){ev.preventDefault();ev.stopPropagation();}var nom=(el&&el.getAttribute('data-nom'))||'';if(!_hasBridge()){_platWarn();return false;}try{window.webkit.messageHandlers.bilan.postMessage('open_'+which+':'+nom);}catch(e){}return false;}
+function plat(which){if(!_hasBridge()){_platWarn();return false;}try{window.webkit.messageHandlers.bilan.postMessage('open_'+which);}catch(e){}return false;}
 // Ferme tout menu déroulant (badge statut, ⋮) quand on clique ailleurs, sans rien changer.
 document.addEventListener('click',function(e){document.querySelectorAll('details.menu[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open');});},true);
 // Retour visuel « en cours » + anti double-clic pour les actions lentes (transfert, aperçu, régénération).
@@ -1051,7 +1073,35 @@ window.slowGo=function(el,msg){
   t.innerHTML='<span style="display:inline-block;width:15px;height:15px;border:3px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:s 1s linear infinite"></span> '+msg;
   t.style.display='flex';
   setTimeout(function(){try{el.removeAttribute('data-busy');el.style.opacity='';el.style.pointerEvents='';}catch(e){}if(t)t.style.display='none';},12000);
-  return true;};</script>
+  return true;};
+// v1.9 — barre de chargement fine reliee aux actions lentes (slowGo)
+(function(){var _sg=window.slowGo;window.slowGo=function(el,msg){var r=_sg?_sg(el,msg):true;if(r){var b=document.getElementById('topbarload');if(b){b.classList.remove('on');void b.offsetWidth;b.classList.add('on');}}return r;};})();
+// Toast de succes vert, reutilisable
+window.okToast=function(msg){var t=document.getElementById('__oktoast');if(!t){t=document.createElement('div');t.id='__oktoast';t.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#1a6b39;color:#fff;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 10px 34px rgba(0,0,0,.28);z-index:99998';document.body.appendChild(t);}t.textContent='✓ '+msg;t.style.display='block';t.style.opacity='1';clearTimeout(t._h);t._h=setTimeout(function(){t.style.transition='opacity .5s';t.style.opacity='0';setTimeout(function(){t.style.display='none';t.style.transition='';},500);},2600);};
+// Copie presse-papiers + retour visuel « Copie »
+window.copyVal=function(text){try{navigator.clipboard.writeText(text);}catch(e){}okToast('Copie');return false;};
+document.addEventListener('DOMContentLoaded',function(){
+  // Flash de succes -> vert + disparition auto (les erreurs .err restent)
+  var f=document.querySelector('.flash:not(.err)');
+  if(f){var s=f.textContent.toLowerCase();
+    if(/(enregistr|ajout|import|supprim|génér|genere|termin|à jour|a jour|cré|cree|mis à jour|effectu|assign|reclass)/.test(s)){f.classList.add('ok');}
+    setTimeout(function(){f.classList.add('fade');setTimeout(function(){f.style.display='none';},550);},4500);}
+  // Bouton « revenir en haut »
+  var tt=document.createElement('button');tt.id='totop';tt.type='button';tt.title='Revenir en haut';tt.innerHTML='↑';
+  tt.onclick=function(){window.scrollTo({top:0,behavior:'smooth'});};document.body.appendChild(tt);
+  var bar=document.createElement('div');bar.id='topbarload';document.body.appendChild(bar);
+  window.addEventListener('scroll',function(){tt.classList.toggle('on',window.scrollY>420);},{passive:true});
+});
+// Raccourci « / » -> focus recherche ; Echap -> ferme menus / lightbox / fenetre MAJ
+document.addEventListener('keydown',function(e){
+  var tag=(e.target&&e.target.tagName)||'';var typing=/^(INPUT|TEXTAREA|SELECT)$/.test(tag)||(e.target&&e.target.isContentEditable);
+  if(e.key==='/'&&!typing){var i=document.querySelector('.topbar .search input');if(i){e.preventDefault();i.focus();i.select();}return;}
+  if(e.key==='Escape'){
+    document.querySelectorAll('details.menu[open]').forEach(function(d){d.removeAttribute('open');});
+    var lb=document.getElementById('lbov');if(lb&&lb.style.display&&lb.style.display!=='none'){if(typeof lbClose==='function')lbClose();}
+    var mj=document.getElementById('majModal');if(mj&&mj.style.display==='flex'){if(typeof majLater==='function')majLater();}
+  }
+});</script>
 <div id=majModal style="display:none;position:fixed;inset:0;background:rgba(8,12,20,.55);z-index:99999;align-items:center;justify-content:center">
   <div style="background:var(--card,#fff);color:var(--ink,#1f2a37);max-width:450px;width:92%;border-radius:16px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.4);border:1px solid var(--line,#e5e7eb)">
     <div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
@@ -1085,7 +1135,7 @@ window.majApply=function(btn){btn.disabled=true;var m=document.getElementById('m
   }).catch(function(){m.textContent='Redémarrage en cours... rechargement dans ~10 s';setTimeout(function(){location.reload();},10000);});};
 </script>
 </body></html>"""
-def page(body, wide=False): return render_template_string(BASE, body=body, wide=wide, logo=LOGO_URI, version=APP_VERSION)
+def page(body, wide=False, title=None): return render_template_string(BASE, body=body, wide=wide, logo=LOGO_URI, version=APP_VERSION, page_title=title)
 
 
 @app.route("/radios")
@@ -1116,15 +1166,15 @@ def radios():
     import json as _j
     _HEAD = '<div class=phead><h1>Radios &amp; tracés à classer</h1><div class=sub>Récupérer une radio (XERO) ou un tracé (WebCeph) et le placer sur un bilan</div></div>'
     _STYLE = '<style>.rcard{background:var(--card);border:1px solid var(--line);border-radius:var(--rad);padding:22px 24px;margin-bottom:20px;box-shadow:var(--sh-sm)}.rhint{margin-top:16px;padding:12px 14px;background:var(--card2);border:1px solid var(--line);border-radius:12px;font-size:13px;color:var(--mut)}.inbgal{display:flex;gap:12px;flex-wrap:wrap;margin:6px 0 2px}.inbthumb{position:relative;cursor:pointer;border:2px solid var(--line);border-radius:12px;overflow:hidden;width:154px;background:var(--card2);transition:.15s}.inbthumb:hover{border-color:#cdd9e6}.inbthumb img{display:block;width:154px;height:112px;object-fit:cover}.inbthumb .cap{font-size:11px;color:var(--mut);padding:5px 8px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.inbthumb input{position:absolute;opacity:0;pointer-events:none}.inbthumb:has(input:checked){border-color:var(--acc);box-shadow:0 0 0 3px rgba(30,138,208,.16)}.inbthumb:has(input:checked)::after{content:"";position:absolute;top:7px;right:7px;width:20px;height:20px;border-radius:50%;background:var(--acc);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}.rempty{padding:26px;text-align:center;color:var(--mut);background:var(--card2);border:1px dashed var(--line);border-radius:12px}.curradio{display:inline-block;margin:10px 14px 0 0;vertical-align:top;text-align:center}.curradio img{max-height:150px;max-width:230px;border:1px solid var(--line);border-radius:10px;display:block}</style>'
-    _C1 = '<div class=rcard><div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><div style="flex:0 0 auto;width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,var(--acc),var(--teal));display:flex;align-items:center;justify-content:center"><svg width=26 height=26 viewBox="0 0 24 24" fill=none stroke=#fff stroke-width=2><rect x=3 y=4 width=18 height=16 rx=2></rect><line x1=8 y1=4 x2=8 y2=20></line><line x1=16 y1=4 x2=16 y2=20></line></svg></div><div style="flex:1;min-width:220px"><div style="font-weight:800;font-size:15px;color:var(--ink)">XERO &mdash; CHU Nice</div><div class=muted>Le site s\'ouvre dans une fenêtre intégrée à l\'app et garde ta session. Tes identifiants ne sont jamais enregistrés.</div></div><a class=btn href="#" onclick="try{window.webkit.messageHandlers.bilan.postMessage(`open_xero`)}catch(e){}; return false;">Ouvrir XERO</a></div><div class=rhint><b style="color:var(--ink)">Comment faire</b> &mdash; connecte-toi, affiche la radio du patient, puis clique le bouton bleu &laquo; Récupérer cette radio &raquo; en bas de la fenêtre. Elle apparaîtra ci-dessous.</div></div>'
+    _C1 = '<div class=rcard><div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><div style="flex:0 0 auto;width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,var(--acc),var(--teal));display:flex;align-items:center;justify-content:center"><svg width=26 height=26 viewBox="0 0 24 24" fill=none stroke=#fff stroke-width=2><rect x=3 y=4 width=18 height=16 rx=2></rect><line x1=8 y1=4 x2=8 y2=20></line><line x1=16 y1=4 x2=16 y2=20></line></svg></div><div style="flex:1;min-width:220px"><div style="font-weight:800;font-size:15px;color:var(--ink)">XERO &mdash; CHU Nice</div><div class=muted>Le site s\'ouvre dans une fenêtre intégrée à l\'app et garde ta session. Tes identifiants ne sont jamais enregistrés.</div></div><a class=btn href="#" onclick="return plat(\'xero\')">Ouvrir XERO</a></div><div class=rhint><b style="color:var(--ink)">Comment faire</b> &mdash; connecte-toi, affiche la radio du patient, puis clique le bouton bleu &laquo; Récupérer cette radio &raquo; en bas de la fenêtre. Elle apparaîtra ci-dessous.</div></div>'
     _C2A = '<div class=rcard><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px"><h2 style="margin:0">Radios récupérées</h2>'
-    _C2B = '</div><p class=muted style="margin:0 0 4px">Choisis la radio a placer, puis le patient et le temps.</p><form method=post action="/radios/attach" enctype=multipart/form-data>'
+    _C2B = '</div><p class=muted style="margin:0 0 4px">Choisis la radio à placer, puis le patient et le temps.</p><form method=post action="/radios/attach" enctype=multipart/form-data>'
     _C2C = '<div class="grid g2" style="margin-top:16px"><div><label>Patient</label><select id=selp name=slug onchange=fillRecs()>'
-    _C2D = '</select></div><div><label>Réévaluation</label><select id=selr name=rid onchange=loadCur()></select></div><div><label>Type de radio</label><select name=type><option value=panoramique>Panoramique</option><option value=teleradiographie_profil>Téléradiographie de profil</option><option value=trace_cephalo>Tracé céphalométrique</option></select></div><div><label>... ou importer un fichier</label><input type=file name=file accept="image/*"></div></div><div style="margin-top:16px"><button class=btn type=submit>Attacher la radio</button></div></form><div id=curradios style="margin-top:16px"></div></div>'
+    _C2D = '</select></div><div><label>Réévaluation</label><select id=selr name=rid onchange=loadCur()></select></div><div><label>Type de radio</label><select name=type><option value=panoramique>Panoramique</option><option value=teleradiographie_profil>Téléradiographie de profil</option><option value=trace_cephalo>Tracé céphalométrique</option></select></div><div><label>... ou importer un fichier</label><input type=file name=file accept="image/*"></div></div><div style="margin-top:16px"><button class=btn type=submit onclick="this.innerHTML=\'<span class=spin></span> Rattachement…\'">Attacher la radio</button></div></form><div id=curradios style="margin-top:16px"></div></div>'
     _EMPTY = "<div class=rempty>Aucune radio récupérée pour l'instant.<br>Ouvre XERO, affiche une radio et clique &laquo; Récupérer cette radio &raquo;.</div>"
     _JSA = '<script>var RECS='
     _JSB = ';\nfunction fillRecs(){var s=document.getElementById(\'selp\').value;var rs=document.getElementById(\'selr\');rs.innerHTML=\'\';(RECS[s]||[]).forEach(function(r){var o=document.createElement(\'option\');o.value=r.rid;o.textContent=r.label;rs.appendChild(o);});loadCur();}\nfunction loadCur(){var s=document.getElementById(\'selp\').value,r=document.getElementById(\'selr\').value;var box=document.getElementById(\'curradios\');if(!s||!r){box.innerHTML=\'\';return;}\nfetch(\'/radios/record_radios?slug=\'+encodeURIComponent(s)+\'&rid=\'+encodeURIComponent(r)).then(function(x){return x.json();}).then(function(d){var LBL={panoramique:\'Panoramique\',teleradiographie_profil:\'Téléradiographie de profil\'};var h=\'\';Object.keys(d).forEach(function(k){h+=\'<div class=curradio><div class=muted style="font-size:12px;margin-bottom:4px">\'+LBL[k]+\'</div><img src="\'+d[k]+\'"><form method=post action="/radios/delete" style="margin:6px 0 0"><input type=hidden name=slug value="\'+s+\'"><input type=hidden name=rid value="\'+r+\'"><input type=hidden name=type value="\'+k+\'"><button class="btn sec" type=submit style="font-size:12px;padding:4px 10px">Supprimer</button></form></div>\';});box.innerHTML=h?(\'<div style="font-weight:700;font-size:13px;margin:6px 0 2px;color:var(--ink)">Déjà sur ce bilan</div>\'+h):\'\';});}\nwindow.addEventListener(\'load\',function(){fillRecs();});</script>'
-    _vider = ('<form method=post action="/radios/clear_inbox" style="margin:0"><button class="btn sec" type=submit>Vider la file</button></form>') if files else ''
+    _vider = ('<form method=post action="/radios/clear_inbox" style="margin:0"><button class="btn sec danger" type=submit onclick="return confirm(\'Vider la file des radios récupérées ? Les fichiers en attente seront retirés (les radios déjà rattachées à un patient ne sont pas touchées).\')">Vider la file</button></form>') if files else ''
     _thumbs = ''
     for _f in files:
         _thumbs += '<label class=inbthumb><input type=radio name=inbox value="' + _f + '"><img src="/radios/inbox_file/' + _f + '"><div class=cap>' + _f + '</div></label>'
@@ -1190,7 +1240,7 @@ def radios_delete():
         except Exception: pass
         flash("Radio supprimee.")
     else:
-        flash("Aucune radio de ce type sur cette reevaluation.")
+        flash("Aucune radio de ce type sur cette réévaluation.")
     return redirect(url_for("radios"))
 
 
@@ -1261,8 +1311,8 @@ def form_fields(rec=None, with_identity=True):
     ident = ""
     if with_identity:
         ident = """<div class=card><h2>Identité</h2><div class="grid g3">
-        <div><label>Nom</label><input name=nom required></div>
-        <div><label>Prénom</label><input name=prenom></div>
+        <div><label>Nom</label><input name=nom required autofocus placeholder="ex. MARTIN"></div>
+        <div><label>Prénom</label><input name=prenom placeholder="ex. Léa"></div>
         <div><label>Date de naissance</label><input name=dob type=date></div>
         <div><label>Sexe</label><select name=sexe><option>non précisé</option><option>féminin</option><option>masculin</option></select></div></div></div>"""
     photos = "".join("""<div><label>%s</label><input type=file name="photo_%s" accept="image/*"></div>""" % (l, k) for k, l in PHOTO_FIELDS)
@@ -1403,7 +1453,7 @@ def actions_menu(slug, pt=None):
         _col = "#d97706" if _on else "#24405f"
         staff = ('<a class=mi href="%s" style="color:%s">%s</a><div class=sep></div>'
                  % (url_for("toggle_staffer", slug=slug), _col, _lbl))
-    return ('<details class="menu" style="position:absolute;top:8px;right:8px;z-index:25"><summary class=dots>&#8942;</summary>'
+    return ('<details class="menu" style="position:absolute;top:8px;right:8px;z-index:25"><summary class=dots title="Options du patient">&#8942;</summary>'
             '<div class="menu-pop">'
             '%s'
             '<a class=mi href="%s">&#9998; Modifier la fiche</a>'
@@ -1464,6 +1514,25 @@ def first_record_date(slug, pt):
         if r and r.get("date"):
             ds.append((r["date"] or "")[:10])
     return min(ds) if ds else None
+
+def _noac(s):
+    """Minuscule sans accents — pour une recherche tolérante (« lea » trouve « Léa »)."""
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", (s or "")) if unicodedata.category(c) != "Mn").lower()
+
+def _last_mod_txt(slug):
+    """« modifié il y a … » d'après la date du fichier patient.json (dernière écriture)."""
+    try:
+        ts = os.path.getmtime(os.path.join(pdir(slug), "patient.json"))
+        d = int((datetime.datetime.now().timestamp() - ts) // 86400)
+        if d <= 0: return "modifié aujourd'hui"
+        if d == 1: return "modifié hier"
+        if d < 31: return "modifié il y a %d j" % d
+        mo = d // 30
+        if mo < 12: return "modifié il y a %d mois" % mo
+        return "modifié il y a %d an%s" % (mo // 12, "s" if mo // 12 > 1 else "")
+    except Exception:
+        return ""
 
 def treatment_duration_txt(slug, pt):
     d = first_record_date(slug, pt)
@@ -1554,7 +1623,8 @@ def dashboard():
     nstaff = sum(1 for m in allpts if m.get("a_staffer"))
     npres = sum(1 for m in allpts if m.get("a_presenter"))
     pts = allpts
-    if q: pts = [m for m in pts if q in m.get("nom", "").lower()]
+    if q:
+        qn = _noac(q); pts = [m for m in pts if qn in _noac(m.get("nom", ""))]
     if fstat in STATUT_MAP: pts = [m for m in pts if statut_of(m) == fstat]
     if fstaff: pts = [m for m in pts if m.get("a_staffer")]
     if fpres: pts = [m for m in pts if m.get("a_presenter")]
@@ -1642,11 +1712,14 @@ def dashboard():
         _flags = ('<span style="display:inline-flex;gap:9px;align-items:center">%s%s%s</span>'
                   % (_starbtn(), _presbtn(), _cam(inline=True)))
         if vue == "liste":
-            cards.append(('<div class=lrow>%s<span style="display:inline-flex;gap:7px;align-items:center;margin-right:2px">%s%s%s</span>'
+            cards.append(('<div class=lrow><a href="%s" class=lrowlink title="Ouvrir le dossier"></a>'
+                          '%s<span style="display:inline-flex;gap:7px;align-items:center;margin-right:2px">%s%s%s</span>'
                           '<a href="%s" class=lnm>%s</a>'
-                          '<span class=lage>%s</span>%s<span class=lstat>%s</span></div>')
-                         % (actions_menu(slug, m), _starbtn(16), _presbtn(16), _cam(inline=True),
-                            _su, _nom, _age, plat_btns(_nom, size=22), status_menu(slug, m)))
+                          '<span class=lage>%s</span>'
+                          '<span class="lmod muted" style="min-width:118px;font-size:12px">%s</span>'
+                          '%s<span class=lstat>%s</span></div>')
+                         % (_su, actions_menu(slug, m), _starbtn(16), _presbtn(16), _cam(inline=True),
+                            _su, _nom, _age, _last_mod_txt(slug), plat_btns(_nom, size=22), status_menu(slug, m)))
         elif vue == "icone":
             cards.append(('<div class="pcard nopic">%s'
                           '<a href="%s" style="display:block;color:inherit;text-decoration:none">'
@@ -1746,15 +1819,34 @@ def dashboard():
       "if(e.isIntersecting){var t=e.target,u=t.getAttribute('data-u');if(u){t.style.setProperty('--u',\"url('\"+u+\"')\");}io.unobserve(t);}});},{rootMargin:'500px'});"
       "document.querySelectorAll('.thumb[data-u]').forEach(function(t){io.observe(t);});"
       "}catch(e){document.querySelectorAll('.thumb[data-u]').forEach(function(t){t.style.setProperty('--u',\"url('\"+t.getAttribute('data-u')+\"')\");});}})();</script>")
+    _listhead = ""
+    if vue == "liste" and cards:
+        def _sortlnk(k, lbl):
+            a = {"vue": "liste", "tri": k}
+            if q: a["q"] = q
+            if fstat in STATUT_MAP: a["statut"] = fstat
+            if fstaff: a["staffer"] = "1"
+            if fpres: a["presenter"] = "1"
+            col = "var(--acc)" if tri == k else "var(--mut)"
+            return '<a href="%s" style="color:%s;font-weight:700">%s%s</a>' % (
+                url_for("dashboard", **a), col, lbl, (" ▾" if tri == k else ""))
+        _listhead = ('<div class=lrow style="background:transparent;border:none;box-shadow:none;'
+                     'padding:2px 16px;margin-bottom:2px;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em">'
+                     '<span style="width:30px"></span><span style="width:44px"></span>'
+                     '<span style="flex:1;min-width:140px">%s</span>'
+                     '<span style="min-width:70px">%s</span>'
+                     '<span style="min-width:118px" class=muted>Modifié</span>'
+                     '<span style="margin-left:auto;margin-right:34px">%s</span></div>'
+                     % (_sortlnk("nom", "Nom"), _sortlnk("age", "Âge"), _sortlnk("statut", "Statut")))
     return page("""<div class=phead><h1>Bibliothèque</h1><div class=sub>%d patient%s</div></div>
     <form method=get style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <input type=hidden name=q value="%s"><input type=hidden name=statut value="%s">
     <input type=hidden name=staffer value="%s"><input type=hidden name=presenter value="%s">%s%s</form>
     <div style="margin-bottom:18px">%s</div>
-    <div class="plist %s">%s</div>%s""" % (total, "s" if total > 1 else "",
+    %s<div class="plist %s">%s</div>%s""" % (total, "s" if total > 1 else "",
         q, (fstat if fstat in STATUT_MAP else ""),
         ("1" if fstaff else ""), ("1" if fpres else ""),
-        trisel, vuesel, chips, vue, "".join(cards), _scroll_js))
+        trisel, vuesel, chips, _listhead, vue, "".join(cards), _scroll_js), title="Bibliothèque")
 
 # ======================================================================
 #  NOUVEAU PATIENT (+ bilan initial)
@@ -2077,20 +2169,27 @@ def patient_tabs(slug, active):
     return out + '</div>'
 
 def phead(slug, pt, active):
-    """En-tête patient commun aux onglets : identité + statut + durée + barre d'onglets."""
+    """En-tête patient commun aux onglets : fil d'Ariane + identité + statut + durée + barre d'onglets."""
     dur = treatment_duration_txt(slug, pt)
     dur_html = (' &middot; <span class=muted>%s</span>' % dur) if dur else ""
     _ct = []
     if pt.get("tel"): _ct.append('&#128222; ' + str(pt.get("tel")))
     if pt.get("email"): _ct.append('&#9993; ' + str(pt.get("email")))
     contact_html = (' &middot; ' + ' &middot; '.join(_ct)) if _ct else ""
-    return ('<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">'
+    # Âge recalculé à la volée depuis la date de naissance (toujours à jour), repli sur la valeur stockée.
+    _age = age_at(pt.get("dob", ""), datetime.date.today().isoformat()) or (pt.get("age", "") or "")
+    dob_html = pt.get("dob_court", "")
+    if dob_html and _age: dob_html = "%s (%s)" % (dob_html, _age)
+    _crumb = ('<div class=crumb><a href="%s">Bibliothèque</a> <span class=sep>&rsaquo;</span> %s</div>'
+              % (url_for("dashboard"), _hesc(pt.get("nom", ""))))
+    return (_crumb +
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">'
             '<div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h1 style="margin:0">%s</h1>%s</div>'
-            '<div class=muted style="margin-top:2px">%s &middot; %s &middot; n\xe9(e) %s%s%s</div></div>'
+            '<div class=muted style="margin-top:2px">%s &middot; n\xe9(e) %s%s%s</div></div>'
             '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">'
             '%s<a class="btn sec" href="%s">← Biblioth\xe8que</a></div></div>%s'
-            ) % (pt.get("nom", ""), statut_badge(pt), pt.get("age", ""), pt.get("sexe", ""),
-                 pt.get("dob_court", ""), dur_html, contact_html,
+            ) % (pt.get("nom", ""), statut_badge(pt), pt.get("sexe", ""),
+                 dob_html, dur_html, contact_html,
                  plat_btns(pt.get("nom", ""), size=30), url_for("dashboard"), patient_tabs(slug, active))
 
 @app.route("/patient/<slug>")
@@ -2136,7 +2235,7 @@ def patient(slug):
       <a class=btn href="%s">+ Nouvelle réévaluation</a></div></div>
     <div class=reclist>%s</div></div>""" % (
         phead(slug, pt, "bilans"), url_for("transfert_dossier", slug=slug), url_for("reeval", slug=slug),
-        rows or "<div class=recsub style='padding:12px 4px'>Aucun enregistrement.</div>"))
+        rows or "<div class=recsub style='padding:12px 4px'>Aucun enregistrement.</div>"), title=pt.get("nom", ""))
 
 # ======================================================================
 #  TRANSFERT DE DOSSIER : Word complet + dossier brut (zip) -> Téléchargements
@@ -2291,7 +2390,7 @@ def documents_page(slug):
                  'display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;letter-spacing:.5px">%s</span>'
                  '<div style="flex:1;min-width:0"><div style="font-weight:700;word-break:break-word">%s</div>'
                  '<div class=muted style="font-size:12.5px">%s &middot; %s</div></div>'
-                 '%s<a class="btn sec sm" href="%s">&#8681; Telecharger</a> %s'
+                 '%s<a class="btn sec sm" href="%s">&#8681; Télécharger</a> %s'
                  '</div>') % (col, tag, nom, dt, sz, voir, dl_url, menu)
     if not items:
         rows = '<div class=muted style="padding:22px 4px;text-align:center">Aucun document. Ajoute un fichier ci-dessus (PDF, Word, radio, photo...).</div>'
@@ -2342,7 +2441,7 @@ def documents_upload(slug):
         except Exception:
             pass
     _docs_save(slug, items)
-    flash(("%d document(s) ajoute(s)." % n) if n else "Aucun fichier importe.")
+    flash(("%d document(s) ajouté(s)." % n) if n else "Aucun fichier importé.")
     return redirect(url_for("documents_page", slug=slug))
 
 @app.route("/patient/<slug>/documents/file/<did>")
@@ -2453,7 +2552,7 @@ def _rec_options_html(slug, pt, checked=None, name="records"):
         out += ('<label style="display:flex;align-items:center;gap:9px;padding:8px 4px;border-bottom:1px solid var(--line);cursor:pointer">'
                 '<input type=checkbox name=%s value="%s"%s style="width:auto">'
                 '<span><b>%s</b> <span class=muted>&middot; %s</span></span></label>') % (name, rid, ck, _hesc(lbl), dd)
-    return out or '<div class=muted>Aucun temps enregistre.</div>'
+    return out or '<div class=muted>Aucun temps enregistré.</div>'
 
 EVO_VIEWS = [
     ("exo_face_repos", "Visage au repos", "photo"),
@@ -2511,7 +2610,7 @@ def _slides_for_record(slug, rid, pt, r, section_label=None, is_initial=False):
         for key in keys:
             src = photo_src(key)
             if src:
-                cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)">'
+                cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)" alt="Cliché du bilan (cliquer pour agrandir)">'
                              '<figcaption>%s</figcaption></figure>' % (src, PLBL.get(key, key)))
         if cells:
             S.append(_sl(title, '<div class="pgrid n%d">%s</div>' % (len(cells), "".join(cells)), tp))
@@ -2522,7 +2621,7 @@ def _slides_for_record(slug, rid, pt, r, section_label=None, is_initial=False):
     for k, lbl in (("panoramique", "Panoramique"), ("teleradiographie_profil", "T&eacute;l&eacute;radiographie de profil")):
         rel = "03_radios/%s.jpg" % k
         if os.path.exists(os.path.join(base, rel)):
-            rad_cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)">'
+            rad_cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)" alt="Cliché du bilan (cliquer pour agrandir)">'
                              '<figcaption>%s</figcaption></figure>' % (psrc(rel), lbl))
     if rad_cells:
         S.append(_sl("Radiographies", '<div class="pgrid n%d">%s</div>' % (len(rad_cells), "".join(rad_cells)), tp))
@@ -2547,7 +2646,7 @@ def _slides_for_record(slug, rid, pt, r, section_label=None, is_initial=False):
     if os.path.isdir(wc):
         for tf in sorted(os.listdir(wc)):
             if tf.lower().endswith((".jpg", ".jpeg", ".png")):
-                tr_cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)"></figure>'
+                tr_cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)" alt="Cliché du bilan (cliquer pour agrandir)"></figure>'
                                 % psrc("06_webceph/%s" % tf))
     if tr_cells:
         S.append(_sl("Trac&eacute; c&eacute;phalom&eacute;trique",
@@ -2562,7 +2661,7 @@ def _slides_for_record(slug, rid, pt, r, section_label=None, is_initial=False):
         nrows = (len(rend) + ncol - 1) // ncol
         maxh = max(20, int((80 - 5 * nrows) / nrows))
         figs = "".join('<figure class=pfig style="height:auto;justify-content:flex-start">'
-                       '<img loading=lazy src="%s" onclick="zoom(this)" style="max-height:%dvh">'
+                       '<img loading=lazy src="%s" onclick="zoom(this)" alt="Cliché du bilan (cliquer pour agrandir)" style="max-height:%dvh">'
                        '<figcaption>%s</figcaption></figure>' % (src, maxh, lbl) for src, lbl in rend)
         grid = ('<div style="display:grid;grid-template-columns:repeat(%d,1fr);gap:8px 16px;'
                 'width:100%%;max-height:84vh;align-content:center;justify-items:center;margin-top:2vh">%s</div>') % (ncol, figs)
@@ -2605,7 +2704,7 @@ def _evolution_slides(slug, pt, evo_records, evo_views):
             if not src:
                 continue
             cap = _hesc(labels.get(rid, "")) + (("<br><span style='opacity:.7'>%s</span>" % dates.get(rid, "")) if dates.get(rid) else "")
-            cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)">'
+            cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)" alt="Cliché du bilan (cliquer pour agrandir)">'
                          '<figcaption>%s</figcaption></figure>' % (src, cap))
         if len(cells) >= 2:
             S.append(_sl("Évolution &mdash; %s" % _hesc(vlabel),
@@ -2662,7 +2761,7 @@ def staff_page(slug):
                   '<span class=muted style="font-size:13px">%d temps &middot; %d question(s)%s &mdash; cliquer pour ouvrir</span></span></a>'
                   '%s</div></div>') % (show, d, ntemps, nq, evo_txt, edit)
     if not entries:
-        cards = '<div class=card center muted>Aucun staff. Cree un staff : choisis les temps a montrer et tes questions.</div>'
+        cards = '<div class=card center muted>Aucun staff. Crée un staff : choisis les temps à montrer et tes questions.</div>'
     today = datetime.date.today().isoformat()
     add = ('<details class=card style="margin-bottom:16px">'
            '<summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:11px;font-weight:800;font-size:16px">'
@@ -2972,9 +3071,12 @@ def import_massif():
         <h1>Importation massive</h1>
         <div class=flash style="background:var(--accw);border-color:var(--line)">Choisis le <b>dossier qui contient tes dossiers patients</b>
         (ta clé USB, un dossier « BILAN PERSO »…). Tout se passe <b>en local</b> : rien n'est envoyé sur internet.</div>
+        <div class=muted style="margin:-6px 0 16px;font-size:13px">Trois façons d'importer&nbsp;: <b>Importation massive</b> (ici) pour <b>plusieurs patients</b> d'un coup depuis un dossier ·
+        <a href="%s">Nouveau patient</a> pour <b>un seul</b> patient (avec dépôt en vrac de ses fichiers) ·
+        <a href="%s">Importer un bilan Word</a> pour créer un patient <b>à partir d'un bilan .docx</b>.</div>
         <div class=card><h2 style="margin-top:0">Emplacements</h2>%s
         <form method=get style="margin-top:10px;display:flex;gap:8px"><input name=path placeholder="…ou colle un chemin de dossier ici">
-        <button class="btn sec">Ouvrir</button></form></div>""" % (url_for("dashboard"), items))
+        <button class="btn sec">Ouvrir</button></form></div>""" % (url_for("dashboard"), url_for("nouveau"), url_for("word_import"), items))
     if not os.path.isdir(path):
         flash("Dossier introuvable : %s" % path); return redirect(url_for("import_massif"))
     # navigateur : sous-dossiers + bouton « analyser »
@@ -3930,7 +4032,7 @@ def suivi(slug):
     suivi_card = '<div class=card><h2 style="margin:0 0 10px">Suivi</h2>%s%s</div>' % (table, add)
 
     body = '%s%s%s' % (phead(slug, pt, "suivi"), etat_card, suivi_card)
-    return page(body)
+    return page(body, title=pt.get("nom", ""))
 
 @app.route("/patient/<slug>/suivi/note/add", methods=["POST"])
 def note_add(slug):
@@ -4590,7 +4692,7 @@ def evolution(slug):
   <div id=evcap style="color:#fff;font:600 15px -apple-system,sans-serif;margin-bottom:10px;text-align:center;padding:0 60px"></div>
   <img id=evbig style="max-width:92vw;max-height:78vh;border-radius:10px;box-shadow:0 12px 50px rgba(0,0,0,.7);background:#fff">
   <div id=evpos style="color:#c7d2e0;margin-top:12px;font-size:13px"></div>
-  <button onclick="evNav(-1)" title="Precedent" style="__NAVB__;left:2vw">&#8249;</button>
+  <button onclick="evNav(-1)" title="Précédent" style="__NAVB__;left:2vw">&#8249;</button>
   <button onclick="evNav(1)" title="Suivant" style="__NAVB__;right:2vw">&#8250;</button>
   <button onclick="evClose()" title="Fermer" style="position:fixed;top:16px;right:20px;width:44px;height:44px;border:none;border-radius:10px;background:rgba(255,255,255,.14);color:#fff;font-size:22px;cursor:pointer;z-index:10000">&#10005;</button>
 </div>
@@ -4657,7 +4759,7 @@ def record(slug, rid):
         crop_url = url_for("crop_editor", slug=slug, rid=rid, slot=key)
         if img:
             del_url = url_for("clear_view", slug=slug, rid=rid, view=key)
-            inner = ('<img src="%s" class=slotimg loading=lazy decoding=async onclick="lbShow(\'%s\',null)">'
+            inner = ('<img src="%s" class=slotimg loading=lazy decoding=async onclick="lbShow(\'%s\',null)" alt="Photo de la séance (cliquer pour classer)">'
                      '<a class=slotcrop href="%s" title="Recadrer / orienter">&#9986;</a>'
                      '<form method=post action="%s" style="margin:0">'
                      '<button type=submit class=slotdel title="Retirer cette photo de cette vue" onclick="return confirm(\'Retirer cette photo de cette vue ?\')">&times;</button></form>'
@@ -4690,7 +4792,7 @@ def record(slug, rid):
                 gth = url_for("rthumb", slug=slug, rid=rid, path="08_galerie/%s" % f)
                 gthumbs += ('<img class=galimg loading=lazy decoding=async draggable=true data-file="%s" src="%s" '
                             'ondragstart="event.dataTransfer.setData(\'f\',\'%s\')" '
-                            'onclick="lbShow(\'%s\',\'%s\')">') % (f, gth, f, gsrc, f)
+                            'onclick="lbShow(\'%s\',\'%s\')" alt="Photo non classée de la séance">') % (f, gth, f, gsrc, f)
     gallery_block = ""
     if gthumbs:
         gallery_block = ('<div style="margin-top:14px"><div style="font-weight:700;margin-bottom:6px">Galerie — toutes les photos '
@@ -4736,7 +4838,7 @@ def record(slug, rid):
                    + '<form id=afForm method=post action="%s"><input type=hidden name=view><input type=hidden name=file></form>' % assign_action
                    + slots_html + gallery_block
                    + '<div id=lbov onclick="if(event.target.id==\'lbov\')lbClose()"><a id=lbclose onclick="lbClose()">&times;</a>'
-                     '<img id=lbimg src=""><div id=lbassign><div style="color:#cfe0ff;text-align:center;margin-top:12px;font-size:13px">Assigner cette photo à :</div>'
+                     '<img id=lbimg src="" alt="Photo agrandie"><div id=lbassign><div style="color:#cfe0ff;text-align:center;margin-top:12px;font-size:13px">Assigner cette photo à :</div>'
                      '<div id=lbbtns>' + lb_buttons + '</div></div></div>')
     def img_line(cells):
         cells = [c for c in cells if c]
@@ -4747,7 +4849,7 @@ def record(slug, rid):
     def stl_cell(key):
         rel = "05_stl_rendus/%s.png" % key
         if not ex_(rel): return ""
-        return ('<div><img src="%s" onclick="lbShow(this.src,\'\')" style="width:100%%;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;display:block">'
+        return ('<div><img src="%s" onclick="lbShow(this.src,\'\')" alt="Rendu 3D du modèle (cliquer pour agrandir)" style="width:100%%;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;display:block">'
                 '<div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-top:3px">'
                 '<span class=muted>%s</span>'
                 '<form method=post action="%s" style="margin:0"><button class="btn sec" style="padding:1px 7px;font-size:12px;line-height:1.4" title="Retourner haut/bas">\u21c5</button></form>'
@@ -4802,10 +4904,10 @@ def record(slug, rid):
     rad = ""
     for key, lbl in [("panoramique", "Panoramique"), ("teleradiographie_profil", "Téléradiographie de profil")]:
         rel = "03_radios/%s.jpg" % key
-        if ex_(rel): rad += ('<div style="position:relative"><img src="%s" onclick="lbShow(this.src,\'\')" style="width:100%%;border-radius:8px;border:1px solid #e3e8ef;cursor:zoom-in;display:block">' '<form method=post action="%s" style="margin:0;position:absolute;top:8px;right:8px"><button type=submit title="Supprimer cette radio" onclick="return confirm(\'Supprimer cette radiographie ?\')" style="width:30px;height:30px;border:none;border-radius:8px;background:rgba(200,40,40,.9);color:#fff;font-size:17px;line-height:1;cursor:pointer">&times;</button></form>' '<div class=muted style=text-align:center>%s</div>' '<form method=post action="%s" style="margin:3px 0 0;text-align:center"><button class="btn sec" type=submit style="font-size:11.5px;padding:3px 9px" title="Reclasser cette radio">&#8646; Reclasser en %s</button></form>' '</div>') % (u(rel), url_for("record_radio_delete", slug=slug, rid=rid, key=key), lbl, url_for("record_radio_retype", slug=slug, rid=rid, key=key), ("Téléradiographie de profil" if key == "panoramique" else "Panoramique"))
+        if ex_(rel): rad += ('<div style="position:relative"><img src="%s" onclick="lbShow(this.src,\'\')" alt="Radiographie / tracé (cliquer pour agrandir)" style="width:100%%;border-radius:8px;border:1px solid #e3e8ef;cursor:zoom-in;display:block">' '<form method=post action="%s" style="margin:0;position:absolute;top:8px;right:8px"><button type=submit title="Supprimer cette radio" onclick="return confirm(\'Supprimer cette radiographie ?\')" style="width:30px;height:30px;border:none;border-radius:8px;background:rgba(200,40,40,.9);color:#fff;font-size:17px;line-height:1;cursor:pointer">&times;</button></form>' '<div class=muted style=text-align:center>%s</div>' '<form method=post action="%s" style="margin:3px 0 0;text-align:center"><button class="btn sec" type=submit style="font-size:11.5px;padding:3px 9px" title="Reclasser cette radio">&#8646; Reclasser en %s</button></form>' '</div>') % (u(rel), url_for("record_radio_delete", slug=slug, rid=rid, key=key), lbl, url_for("record_radio_retype", slug=slug, rid=rid, key=key), ("Téléradiographie de profil" if key == "panoramique" else "Panoramique"))
     # 4) ANALYSE RADIO (Steiner)
     steiner_graph = ('<div style="margin-bottom:14px">%s</div>' % steiner_table_html(r)) if r.get("steiner") else ""
-    steiner_inputs = "".join('<div><label>%s</label><input name="st_%s" inputmode=decimal value="%s" autocomplete=off></div>'
+    steiner_inputs = "".join('<div><label>%s</label><input name="st_%s" inputmode=decimal value="%s" autocomplete=off placeholder="valeur"></div>'
         % (short, nom, (("%g" % r["steiner"][nom]) if nom in r.get("steiner", {}) else "")) for nom, short, mean, sd in STEINER_FIELDS)
     # 5) SYNTHESE
     syn = r.get("synthese", {}); ex = r.get("exam", {}); ang = r.get("angle", {})
@@ -4829,38 +4931,44 @@ def record(slug, rid):
       '<div class=card id=steiner><h2 style="margin:0 0 6px">Analyse radiographique (Steiner)</h2>%s'
         '<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600;color:var(--acc)">Modifier les valeurs de la céphalométrie</summary>'
         '<div class="grid g3" style="margin-top:10px">%s</div></details></div>'
-      '<div class=card><h2>Synthese diagnostique</h2>%s</div>'
+      '<div class=card><h2>Synth&egrave;se diagnostique</h2>%s</div>'
       '%s'
       '%s'
       '<div class=card><details><summary style="cursor:pointer;font-weight:600;font-size:16px;color:var(--acc)">Examen clinique &amp; motif de consultation</summary>'
         '<div style="margin-top:12px"><label>Motif de consultation</label><input name=motif value="%s" placeholder="Motif..." style="width:100%%">'
         '%s%s%s</div></details></div>'
-      '<div class=card><details><summary style="cursor:pointer;font-weight:600;font-size:16px;color:var(--acc)">Modification des elements (photos / radios / STL)</summary>'
-        '<p class=muted style=margin:8px_0>Depose un fichier seulement pour le remplacer, puis Enregistrer.</p>'
+      '<div class=card><details><summary style="cursor:pointer;font-weight:600;font-size:16px;color:var(--acc)">Modification des &eacute;l&eacute;ments (photos / radios / STL)</summary>'
+        '<p class=muted style=margin:8px_0>D&eacute;pose un fichier seulement pour le remplacer, puis Enregistrer.</p>'
         '<div class="grid g4">%s</div><div class="grid g2" style="margin-top:10px">'
           '<div><label>Panoramique</label><input type=file name=radio_panoramique accept="image/*"></div>'
           '<div><label>Téléradiographie</label><input type=file name=radio_teleradiographie_profil accept="image/*"></div>'
-          '<div><label>STL superieur</label><input type=file name=stl_UpperJawScan accept=".stl"></div>'
-          '<div><label>STL inferieur</label><input type=file name=stl_LowerJawScan accept=".stl"></div></div></details></div>'
-      '<button type=submit class=btn>Enregistrer &amp; regenerer</button></form>') % (
+          '<div><label>STL sup&eacute;rieur</label><input type=file name=stl_UpperJawScan accept=".stl"></div>'
+          '<div><label>STL inf&eacute;rieur</label><input type=file name=stl_LowerJawScan accept=".stl"></div></div></details></div>'
+      '<div style="position:sticky;bottom:0;z-index:20;display:flex;gap:10px;flex-wrap:wrap;align-items:center;'
+        'background:var(--card);padding:12px;margin-top:16px;border:1px solid var(--line);border-radius:12px;'
+        'box-shadow:0 -6px 20px rgba(0,0,0,.12)">'
+        '<button type=submit class=btn>Enregistrer &amp; r&eacute;g&eacute;n&eacute;rer</button>'
+        '<a class="btn sec" href="%s" title="Recharger la fiche sans enregistrer les modifications">Annuler</a>'
+        '</div></form>') % (
         url_for("edit_record", slug=slug, rid=rid), steiner_graph, steiner_inputs, diag_inputs(syn),
         plan_card(r), suivi_card,
-        motif_val, exsec("Environnement", EXAM_ENV, ex), exsec("Face", EXAM_FACE, ex), angle_html, photo_re)
+        motif_val, exsec("Environnement", EXAM_ENV, ex), exsec("Face", EXAM_FACE, ex), angle_html, photo_re,
+        url_for("record", slug=slug, rid=rid))
 
     _wc_dir = os.path.join(base, "06_webceph"); _tcells = []
     if os.path.isdir(_wc_dir):
         for _tf in sorted(os.listdir(_wc_dir)):
             if _tf.lower().endswith((".jpg", ".jpeg", ".png")):
                 _tsrc = u("06_webceph/%s" % _tf)
-                _tcells.append(('<div style="position:relative"><img src="%s" onclick="lbShow(this.src,\'\')" style="width:100%%;border-radius:8px;border:1px solid #e3e8ef;cursor:zoom-in;display:block">'
-                    '<form method=post action="%s" style="margin:0;position:absolute;top:8px;right:8px"><button type=submit title="Supprimer ce trace" style="width:30px;height:30px;border:none;border-radius:8px;background:rgba(200,40,40,.9);color:#fff;font-size:17px;line-height:1;cursor:pointer">&times;</button></form></div>')
+                _tcells.append(('<div style="position:relative"><img src="%s" onclick="lbShow(this.src,\'\')" alt="Radiographie / tracé (cliquer pour agrandir)" style="width:100%%;border-radius:8px;border:1px solid #e3e8ef;cursor:zoom-in;display:block">'
+                    '<form method=post action="%s" style="margin:0;position:absolute;top:8px;right:8px"><button type=submit title="Supprimer ce tracé" onclick="return confirm(\'Supprimer ce tracé céphalométrique ?\')" style="width:30px;height:30px;border:none;border-radius:8px;background:rgba(200,40,40,.9);color:#fff;font-size:17px;line-height:1;cursor:pointer">&times;</button></form></div>')
                     % (_tsrc, url_for("record_trace_delete", slug=slug, rid=rid, name=_tf)))
     trace_html = "".join(_tcells) if _tcells else "<span class=muted>-</span>"
     body = ("%s<p class=muted><a href=\"%s\">&#8592; %s</a></p>"
       "<h1>%s <span class=tag>%s</span></h1><h2>%s &middot; %s &middot; %s</h2>"
       "<div class=card>%s</div>"
       "<div class=\"card cardphotos\"><h2>Photos</h2>%s</div>"
-      "<div class=card><div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:14px\"><h2 style=margin:0>Modeles 3D</h2>%s</div>%s</div>"
+      "<div class=card><div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:14px\"><h2 style=margin:0>Mod&egrave;les 3D</h2>%s</div>%s</div>"
       "%s%s"
       "<div class=card><h2>Radiographies</h2><div class=\"grid g2\">%s</div></div>"
       "<div class=card id=trace><h2>Tracé céphalométrique</h2><div class=\"grid g2\">%s</div></div>"
@@ -4872,7 +4980,7 @@ def record(slug, rid):
         stl_ctrl, stl_body,
         cap_html, gal_html,
         rad or "<span class=muted>-</span>", trace_html, odonto_card(slug, rid, r), form)
-    return page(body, wide=True)
+    return page(body, wide=True, title="%s — %s" % (pt.get("nom", ""), r.get("label", "") or "dossier"))
 
 @app.route("/record/<slug>/<rid>/trace_delete/<name>", methods=["POST"])
 def record_trace_delete(slug, rid, name):
@@ -4881,7 +4989,7 @@ def record_trace_delete(slug, rid, name):
     if not pt or not r: abort(404)
     fp = os.path.join(rdir(slug, rid), "06_webceph", os.path.basename(name))
     if os.path.exists(fp):
-        try: os.remove(fp); flash("Trace supprime.")
+        try: os.remove(fp); flash("Tracé supprimé.")
         except Exception: pass
     return redirect(url_for("record", slug=slug, rid=rid) + "#trace")
 
@@ -5134,7 +5242,7 @@ def apercu(slug, rid):
     pt = load_patient(slug); r = load_rec(slug, rid)
     if not pt or not r: abort(404)
     base = rdir(slug, rid)
-    body = ('<p class=muted><a href="%s">&#8592; Retour a la fiche</a></p><h1>Apercu du bilan</h1>%s'
+    body = ('<p class=muted><a href="%s">&#8592; Retour à la fiche</a></p><h1>Aperçu du bilan</h1>%s'
             % (url_for("record", slug=slug, rid=rid), apercu_html(slug, rid, pt, r, base)))
     return page(body)
 
@@ -6278,7 +6386,7 @@ def presentation(slug, rid):
         for key in keys:
             src = photo_src(key)
             if src:
-                cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)">'
+                cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)" alt="Cliché du bilan (cliquer pour agrandir)">'
                              '<figcaption>%s</figcaption></figure>' % (src, PLBL.get(key, key)))
         if not cells: return
         S.append(sl(title, '<div class="pgrid n%d">%s</div>' % (len(cells), "".join(cells))))
@@ -6290,7 +6398,7 @@ def presentation(slug, rid):
     for k, lbl in (("panoramique", "Panoramique"), ("teleradiographie_profil", "T&eacute;l&eacute;radiographie de profil")):
         rel = "03_radios/%s.jpg" % k
         if os.path.exists(os.path.join(base, rel)):
-            rad_cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)">'
+            rad_cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)" alt="Cliché du bilan (cliquer pour agrandir)">'
                              '<figcaption>%s</figcaption></figure>' % (psrc(rel), lbl))
     if rad_cells:
         S.append(sl("Radiographies", '<div class="pgrid n%d">%s</div>' % (len(rad_cells), "".join(rad_cells))))
@@ -6299,7 +6407,7 @@ def presentation(slug, rid):
     if os.path.isdir(wc):
         for tf in sorted(os.listdir(wc)):
             if tf.lower().endswith((".jpg", ".jpeg", ".png")):
-                tr_cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)"></figure>'
+                tr_cells.append('<figure class=pfig><img loading=lazy src="%s" onclick="zoom(this)" alt="Cliché du bilan (cliquer pour agrandir)"></figure>'
                                 % psrc("06_webceph/%s" % tf))
     if tr_cells:
         S.append(sl("Trac&eacute; c&eacute;phalom&eacute;trique", '<div class="pgrid n%d">%s</div>' % (min(len(tr_cells), 2), "".join(tr_cells[:2]))))
