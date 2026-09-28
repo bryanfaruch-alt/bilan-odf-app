@@ -19,7 +19,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "2.1"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "2.2"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -1142,19 +1142,6 @@ document.addEventListener('keydown',function(e){
   document.addEventListener('input',mark);document.addEventListener('change',mark);
   document.addEventListener('submit',function(e){if(e.target&&e.target.classList&&e.target.classList.contains('dirtyguard'))dirty=false;});
   window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue='';}});
-})();
-// v2.0 — autosave des « Notes libres » (debounce a la frappe / au collage)
-(function(){var timers=new Map();
-  function saveNote(f,beacon){var url=f.getAttribute('data-note-url');if(!url)return;var st=f.querySelector('.notestatus');
-    var fd=new FormData(f);
-    if(beacon){try{navigator.sendBeacon(url,fd);}catch(e){}return;}
-    fetch(url,{method:'POST',body:fd}).then(function(r){if(st)st.textContent=r.ok?'Enregistré ✓':'Non enregistré';})
-      .catch(function(){if(st)st.textContent='Non enregistré';});}
-  document.addEventListener('input',function(e){var f=e.target.closest&&e.target.closest('form.notelibre');if(!f)return;
-    var st=f.querySelector('.notestatus');if(st)st.textContent='…';
-    if(timers.get(f))clearTimeout(timers.get(f));timers.set(f,setTimeout(function(){saveNote(f,false);},650));});
-  window.addEventListener('beforeunload',function(){document.querySelectorAll('form.notelibre').forEach(function(f){
-    if(timers.get(f)){saveNote(f,true);}});});
 })();
 // Raccourci « / » -> focus recherche ; Echap -> ferme menus / lightbox / fenetre MAJ
 document.addEventListener('keydown',function(e){
@@ -2518,8 +2505,7 @@ def documents_page(slug):
             '<div class=card><h2 style="margin-top:0">Documents (%d)</h2>%s</div>'
             ) % (url_for("documents_upload", slug=slug),
                  filedrop("files", label="Glissez des documents ici, ou cliquez"), len(items), rows)
-    body = phead(slug, pt, "documents") + _tpl + notes_libres_block(
-        url_for("note_libre", slug=slug), pt.get("libre_documents", ""), key="documents")
+    body = phead(slug, pt, "documents") + _tpl
     return page(body, title=pt.get("nom", ""))
 
 @app.route("/patient/<slug>/documents/upload", methods=["POST"])
@@ -2896,9 +2882,7 @@ def staff_page(slug):
            '<div style="margin-top:14px">%s</div></details>') % _staff_form(
                slug, pt, url_for("staff_add", slug=slug), today, None, "", None, None, "Créer le staff")
     hdr = '<h2 style="margin:0 0 6px">Staffs enregistr\xe9s</h2>'
-    notes = notes_libres_block(url_for("note_libre", slug=slug), pt.get("libre_staff", ""), key="staff",
-                               title="Notes libres du staff")
-    return page(phead(slug, pt, "staff") + add + hdr + cards + notes, title=pt.get("nom", ""))
+    return page(phead(slug, pt, "staff") + add + hdr + cards, title=pt.get("nom", ""))
 
 @app.route("/patient/<slug>/staff/add", methods=["POST"])
 def staff_add(slug):
@@ -2977,7 +2961,7 @@ def staff_show(slug, sid):
     S.append(_sl("Questions &amp; r\xe9ponses", qa))
     html = (PRESENT_TPL.replace("__NOM__", pt.get("nom", ""))
             .replace("__BACK__", url_for("staff_page", slug=slug))
-            .replace("__PRESNOTES__", _presnotes_html(pt))
+            .replace("__PRESNOTES__", _presnotes_html(e.get("questions", "")))
             .replace("__SLIDES__", "".join(S)))
     return html
 
@@ -3846,12 +3830,11 @@ def patient_edit(slug):
       <a class="btn sec" href="%s">&#128196; Exporter la fiche (PDF)</a></div>
     <div class=card style="max-width:560px"><h3 style="margin:0 0 6px;color:#C0392B">Zone sensible</h3>
       <p class=muted style="margin:0 0 10px">Supprimer ce patient le déplace dans une corbeille (récupérable), il n'est pas effacé définitivement.</p>
-      <a class="btn sec" href="%s" style="color:#C0392B" onclick="return confirm('Mettre ce patient &agrave; la corbeille ? (r&eacute;cup&eacute;rable)')">&#128465; Supprimer ce patient</a></div>%s""" % (
+      <a class="btn sec" href="%s" style="color:#C0392B" onclick="return confirm('Mettre ce patient &agrave; la corbeille ? (r&eacute;cup&eacute;rable)')">&#128465; Supprimer ce patient</a></div>""" % (
         phead(slug, pt, "fiche"), nom0.replace('"', "&quot;"), prenom0.replace('"', "&quot;"),
         pt.get("dob", ""), opts, stopts, (treatment_duration_txt(slug, pt) or "—"),
         url_for("fiche_pdf", slug=slug),
-        url_for("patient_delete", slug=slug),
-        notes_libres_block(url_for("note_libre", slug=slug), pt.get("libre_fiche", ""), key="fiche")),
+        url_for("patient_delete", slug=slug)),
         title=pt.get("nom", ""))
 
 # ---- changement rapide de statut (depuis la bibliothèque ou l'en-tête) ----
@@ -4224,8 +4207,7 @@ def suivi(slug):
            ) % (url_for("note_add", slug=slug), today)
     suivi_card = '<div class=card><h2 style="margin:0 0 10px">Suivi</h2>%s%s</div>' % (table, add)
 
-    body = '%s%s%s%s' % (phead(slug, pt, "suivi"), etat_card, suivi_card,
-        notes_libres_block(url_for("note_libre", slug=slug), pt.get("libre_suivi", ""), key="suivi"))
+    body = '%s%s%s' % (phead(slug, pt, "suivi"), etat_card, suivi_card)
     return page(body, title=pt.get("nom", ""))
 
 @app.route("/patient/<slug>/suivi/note/add", methods=["POST"])
@@ -4264,28 +4246,11 @@ def note_delete(slug, eid):
     save_patient(slug, pt); flash("Commentaire supprim\xe9.")
     return redirect(url_for("suivi", slug=slug))
 
-# ---- Notes libres par section (texte libre collable, enregistrement auto) ----
-NOTE_LIBRE_KEYS = {"suivi", "staff", "documents", "fiche"}
-
-def notes_libres_block(save_url, current, key=None, title="Notes libres"):
-    """Bloc pliable « Notes libres » : zone de texte collable + autosave (voir JS dans BASE)."""
-    cur = (current or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    hidden = ('<input type=hidden name=key value="%s">' % key) if key else ""
-    filled = " (contient du texte)" if (current or "").strip() else ""
-    return ('<div class=card style="padding:14px 18px"><details%s>'
-            '<summary style="cursor:pointer;font-weight:700;font-size:14px;color:var(--acc);list-style:none">'
-            '&#128221; %s<span class=muted style="font-weight:500;font-size:12px">%s</span></summary>'
-            '<form class=notelibre data-note-url="%s" style="margin-top:10px">%s'
-            '<textarea name=text rows=5 placeholder="Tapez ou collez votre texte ici… (enregistrement automatique)" '
-            'style="width:100%%;min-height:96px">%s</textarea>'
-            '<div class=muted style="font-size:12px;margin-top:4px">&#128190; <span class=notestatus>Enregistré automatiquement</span></div>'
-            '</form></details></div>') % ((" open" if (current or "").strip() else ""), title, filled, save_url, hidden, cur)
-
-def _presnotes_html(pt):
-    """Notes du présentateur affichées en présentation = notes libres du staff du patient."""
-    t = (pt.get("libre_staff", "") or "").strip()
+def _presnotes_html(text):
+    """Notes du présentateur affichées en présentation (touche N) = les questions du staff."""
+    t = (text or "").strip()
     if not t:
-        return "Aucune note. Ajoutez-en dans l'onglet Staff du patient (« Notes libres du staff »)."
+        return "Aucune note pour cette présentation."
     return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 def filedrop(name="files", accept="", multiple=True, label="Glissez vos fichiers ici, ou cliquez pour parcourir"):
@@ -4307,26 +4272,6 @@ def filedrop(name="files", accept="", multiple=True, label="Glissez vos fichiers
            't.textContent=i.files.length+" fichier(s) prêt(s)";}});})();</script>')
     return (tpl.replace("@ID@", mid).replace("@NAME@", name)
                .replace("@ACC@", acc).replace("@MULT@", mult).replace("@LBL@", label))
-
-@app.route("/patient/<slug>/note_libre", methods=["POST"])
-def note_libre(slug):
-    if not logged(): return ("non connecte", 403)
-    pt = load_patient(slug)
-    if not pt: return ("introuvable", 404)
-    key = request.form.get("key", "")
-    if key not in NOTE_LIBRE_KEYS: return ("cle invalide", 400)
-    pt["libre_" + key] = request.form.get("text", "")
-    save_patient(slug, pt)
-    return "ok"
-
-@app.route("/record/<slug>/<rid>/note_libre", methods=["POST"])
-def record_note_libre(slug, rid):
-    if not logged(): return ("non connecte", 403)
-    r = load_rec(slug, rid)
-    if not r: return ("introuvable", 404)
-    r["libre"] = request.form.get("text", "")
-    save_rec(slug, rid, r)
-    return "ok"
 
 @app.route("/patient/<slug>/fiche_pdf")
 def fiche_pdf(slug):
@@ -4367,9 +4312,6 @@ def fiche_pdf(slug):
         story.append(Paragraph("Synthèse — %s" % esc(latest.get("label", "") or "dernier bilan"), H2))
         st = synth_text_of(pt, latest)
         story.append(Paragraph(esc(st).replace("\n", "<br/>") if st.strip() else "Non renseignée.", BODY))
-    if (pt.get("libre_fiche", "") or "").strip():
-        story.append(Paragraph("Notes", H2))
-        story.append(Paragraph(esc(pt["libre_fiche"]).replace("\n", "<br/>"), BODY))
     story.append(Spacer(1, 14))
     story.append(Paragraph("Document généré localement par Bilan ODF le %s — données confidentielles."
                            % datetime.date.today().strftime("%d/%m/%Y"),
@@ -5378,7 +5320,7 @@ def record(slug, rid):
       "<div class=card><h2>Radiographies</h2><div class=\"grid g2\">%s</div></div>"
       "<div class=card id=trace><h2>Tracé céphalométrique</h2><div class=\"grid g2\">%s</div></div>"
       "<div class=card id=odonto><h2>Odontogramme</h2>%s</div>"
-      "%s%s") % (
+      "%s") % (
         banner, url_for("patient", slug=slug), pt["nom"], pt["nom"], r.get("label", ""),
         pt["age"], pt["sexe"], r.get("date", "")[:16].replace("T", " "),
         _statctrl, _copybtn,
@@ -5386,9 +5328,7 @@ def record(slug, rid):
         photos_html or "<span class=muted>-</span>",
         stl_ctrl, stl_body,
         cap_html, gal_html,
-        rad or "<span class=muted>-</span>", trace_html, odonto_card(slug, rid, r), form,
-        notes_libres_block(url_for("record_note_libre", slug=slug, rid=rid), r.get("libre", ""),
-                           title="Notes libres du bilan"))
+        rad or "<span class=muted>-</span>", trace_html, odonto_card(slug, rid, r), form)
     return page(body, wide=True, title="%s — %s" % (pt.get("nom", ""), r.get("label", "") or "dossier"))
 
 @app.route("/record/<slug>/<rid>/trace_delete/<name>", methods=["POST"])
@@ -6865,7 +6805,7 @@ def presentation(slug, rid):
     slides_html = "".join(S)
     html = (PRESENT_TPL.replace("__NOM__", pt.get("nom", ""))
             .replace("__BACK__", url_for("record", slug=slug, rid=rid))
-            .replace("__PRESNOTES__", _presnotes_html(pt))
+            .replace("__PRESNOTES__", _presnotes_html(""))
             .replace("__SLIDES__", slides_html))
     return html
 
