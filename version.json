@@ -1,6 +1,6 @@
 {
- "version": "1.2",
- "notes": "Test de mise a jour automatique",
+ "version": "1.4",
+ "notes": "Test de mise a jour depuis le Dock",
  "files": [
   "app.py",
   "run_native.py",
