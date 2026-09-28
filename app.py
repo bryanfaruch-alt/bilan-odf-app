@@ -19,7 +19,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "1.5"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "1.6"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2515,6 +2515,23 @@ def _slides_for_record(slug, rid, pt, r, section_label=None, is_initial=False):
                              '<figcaption>%s</figcaption></figure>' % (psrc(rel), lbl))
     if rad_cells:
         S.append(_sl("Radiographies", '<div class="pgrid n%d">%s</div>' % (len(rad_cells), "".join(rad_cells)), tp))
+    # Analyse de Steiner : juste apres les radios (ordre demande pour le staff)
+    st = r.get("steiner") or {}
+    srows = []
+    for nom, short, mean, sd in STEINER_FIELDS:
+        v = st.get(nom)
+        if v in (None, ""):
+            continue
+        try: v = float(v)
+        except Exception: continue
+        z = (v - mean) / sd if sd else 0
+        cls = "ok" if abs(z) <= 1 else ("warn" if abs(z) <= 2 else "bad")
+        sig, sev = steiner_signif(nom, v, mean, sd)
+        srows.append('<div class="srow %s"><span class=sname>%s</span><span class=sval>%g</span>'
+                     '<span class=snorm>norme %g</span><span class=ssig>%s</span></div>'
+                     % (cls, short, v, mean, sig if sev else "Dans la norme"))
+    if srows:
+        S.append(_sl("Analyse c&eacute;phalom&eacute;trique de Steiner", '<div class=steiner>%s</div>' % "".join(srows), tp))
     wc = os.path.join(base, "06_webceph"); tr_cells = []
     if os.path.isdir(wc):
         for tf in sorted(os.listdir(wc)):
@@ -2539,22 +2556,6 @@ def _slides_for_record(slug, rid, pt, r, section_label=None, is_initial=False):
         grid = ('<div style="display:grid;grid-template-columns:repeat(%d,1fr);gap:8px 16px;'
                 'width:100%%;max-height:84vh;align-content:center;justify-items:center;margin-top:2vh">%s</div>') % (ncol, figs)
         S.append(_sl("Mod&egrave;les 3D", grid, tp))
-    st = r.get("steiner") or {}
-    srows = []
-    for nom, short, mean, sd in STEINER_FIELDS:
-        v = st.get(nom)
-        if v in (None, ""):
-            continue
-        try: v = float(v)
-        except Exception: continue
-        z = (v - mean) / sd if sd else 0
-        cls = "ok" if abs(z) <= 1 else ("warn" if abs(z) <= 2 else "bad")
-        sig, sev = steiner_signif(nom, v, mean, sd)
-        srows.append('<div class="srow %s"><span class=sname>%s</span><span class=sval>%g</span>'
-                     '<span class=snorm>norme %g</span><span class=ssig>%s</span></div>'
-                     % (cls, short, v, mean, sig if sev else "Dans la norme"))
-    if srows:
-        S.append(_sl("Analyse c&eacute;phalom&eacute;trique de Steiner", '<div class=steiner>%s</div>' % "".join(srows), tp))
     syn = r.get("synthese", {}) or {}
     dcols = []
     for cl, cc in DIAG_COLS:
