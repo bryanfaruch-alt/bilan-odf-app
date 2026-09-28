@@ -1,7 +1,7 @@
 {
- "version": "1.8",
- "notes": "Retour visuel sur les actions longues, accents corriges, boutons du dossier plus clairs",
- "ref": "f2f8b1e4338eccfa757bbda79e08bc2d78a9a58e",
+ "version": "1.9",
+ "notes": "Confort et ergonomie : recherche tolerante aux accents, liste triable avec date de derniere modif, fil d'Ariane et age recalcule, barre d'enregistrement toujours visible + bouton Annuler, confirmations avant suppression, raccourcis clavier (\"/\" recherche, Echap ferme), retour visuel (toasts, barre de chargement, bouton retour en haut) et nombreuses finitions.",
+ "ref": "d7fb30dfa73f7e3a974ee1c0063355824e630e46",
  "files": [
   "app.py",
   "run_native.py",
