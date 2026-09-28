@@ -701,7 +701,7 @@ def maybe_update():
         os._exit(0)
 
 def main():
-    maybe_update()          # verifie/installe une MAJ AVANT de demarrer le serveur
+    # La mise a jour est geree DANS l'app (pop-up HTML fiable) : voir app.py (/maj/state, /maj/apply).
     threading.Thread(target=serve, daemon=True).start()
     _wait_ready()          # attend le serveur (au lieu d'un simple sleep) -> plus de fenêtre blanche
     try:

@@ -1041,6 +1041,36 @@ table.st{width:100%;border-collapse:collapse}table.st td{padding:6px 8px;border-
 <script>function openPlat(which,el,ev){if(ev){ev.preventDefault();ev.stopPropagation();}var nom=(el&&el.getAttribute('data-nom'))||'';try{window.webkit.messageHandlers.bilan.postMessage('open_'+which+':'+nom);}catch(e){}return false;}
 // Ferme tout menu déroulant (badge statut, ⋮) quand on clique ailleurs, sans rien changer.
 document.addEventListener('click',function(e){document.querySelectorAll('details.menu[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open');});},true);</script>
+<div id=majModal style="display:none;position:fixed;inset:0;background:rgba(8,12,20,.55);z-index:99999;align-items:center;justify-content:center">
+  <div style="background:var(--card,#fff);color:var(--ink,#1f2a37);max-width:450px;width:92%;border-radius:16px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.4);border:1px solid var(--line,#e5e7eb)">
+    <div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
+      <span style="width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#16324f,#2f5ca8);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:20px">&#8635;</span>
+      <div style="font-size:18px;font-weight:800">Mise &agrave; jour disponible</div>
+    </div>
+    <div id=majTxt style="font-size:14px;color:var(--mut,#6b7280);line-height:1.55;margin-bottom:16px;white-space:pre-line"></div>
+    <div id=majMsg style="font-size:13px;color:var(--acc,#2f5ca8);margin-bottom:12px;display:none"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button type=button class="btn sec" onclick="majLater()">Plus tard</button>
+      <button type=button class="btn" onclick="majApply(this)">Installer et relancer</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){try{fetch('/maj/state').then(function(r){return r.json();}).then(function(d){
+  if(d&&d.version){var t=document.getElementById('majTxt');
+    var s='Une nouvelle version (v'+d.version+') de Bilan ODF est disponible';
+    if(d.current)s+=' (vous avez la v'+d.current+')';s+='.';
+    if(d.notes)s+='\n\n'+d.notes;
+    s+='\n\nInstaller maintenant et relancer l\'application ?';
+    t.textContent=s;document.getElementById('majModal').style.display='flex';}
+}).catch(function(){});}catch(e){}})();
+window.majLater=function(){document.getElementById('majModal').style.display='none';};
+window.majApply=function(btn){btn.disabled=true;var m=document.getElementById('majMsg');m.style.display='block';m.textContent='Téléchargement et installation...';
+  fetch('/maj/apply',{method:'POST'}).then(function(r){return r.text();}).then(function(t){
+    if(t==='ok'){m.textContent='Installation terminée. Redémarrage en cours, la page se recharge dans ~10 s...';setTimeout(function(){location.reload();},10000);}
+    else{m.textContent='Échec : '+t;btn.disabled=false;}
+  }).catch(function(){m.textContent='Redémarrage en cours... rechargement dans ~10 s';setTimeout(function(){location.reload();},10000);});};
+</script>
 </body></html>"""
 def page(body, wide=False): return render_template_string(BASE, body=body, wide=wide, logo=LOGO_URI, version=APP_VERSION)
 
@@ -2754,6 +2784,125 @@ def staff_export_suivi(slug, sid):
     pt.setdefault("notes", []).append(nt)
     save_patient(slug, pt)
     return ("ok", 200)
+
+# ======================================================================
+#  MISE A JOUR AUTOMATIQUE (verifiee en tache de fond, appliquee dans l'app)
+#  - version.json + fichiers de code lus sur un depot GitHub public
+#  - ne touche JAMAIS aux donnees patients (~/BilanODF_Data)
+# ======================================================================
+GH_OWNER_UPD = "bryanfaruch-alt"
+GH_REPO_UPD = "bilan-odf-app"
+GH_BRANCH_UPD = "main"
+UPDATE_INFO = None          # {"version":.., "notes":.., "man":..} si une MAJ plus recente existe
+
+def _upd_raw_base():
+    return "https://raw.githubusercontent.com/%s/%s/%s/" % (GH_OWNER_UPD, GH_REPO_UPD, GH_BRANCH_UPD)
+
+def _upd_ssl():
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        try:
+            return ssl.create_default_context()
+        except Exception:
+            return None
+
+def _upd_vt(s):
+    try:
+        return tuple(int(x) for x in str(s).strip().split("."))
+    except Exception:
+        return (0,)
+
+def _upd_get(url, timeout):
+    import urllib.request, time as _t
+    u = url + ("&" if "?" in url else "?") + "_=" + str(int(_t.time()))
+    req = urllib.request.Request(u, headers={"Cache-Control": "no-cache", "User-Agent": "BilanODF"})
+    with urllib.request.urlopen(req, timeout=timeout, context=_upd_ssl()) as r:
+        return r.read()
+
+def _upd_check_bg():
+    """Verifie en tache de fond si une version plus recente existe."""
+    global UPDATE_INFO
+    if getattr(sys, "frozen", False):
+        return
+    try:
+        import json
+        man = json.loads(_upd_get(_upd_raw_base() + "version.json", 5).decode("utf-8"))
+        remote = str(man.get("version", "")).strip()
+        if remote and _upd_vt(remote) > _upd_vt(APP_VERSION):
+            UPDATE_INFO = {"version": remote, "notes": str(man.get("notes", "") or ""), "man": man}
+    except Exception:
+        pass
+
+def _upd_apply(man):
+    """Telecharge tout dans un dossier temporaire PUIS remplace en place (sauvegarde .bak_upd)."""
+    import tempfile, shutil
+    base = man.get("base") or _upd_raw_base()
+    files = man.get("files") or []
+    if not files:
+        raise RuntimeError("manifest sans fichiers")
+    tmp = tempfile.mkdtemp(prefix="bilanodf_upd_")
+    try:
+        got = []
+        for rel in files:
+            data = _upd_get(base + rel, 60)
+            if not data:
+                raise RuntimeError("fichier vide: %s" % rel)
+            p = os.path.join(tmp, rel)
+            os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+            with open(p, "wb") as f:
+                f.write(data)
+            got.append(rel)
+        for rel in got:
+            dst = os.path.join(HERE, rel)
+            os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
+            try:
+                if os.path.exists(dst):
+                    shutil.copy2(dst, dst + ".bak_upd")
+            except Exception:
+                pass
+            shutil.move(os.path.join(tmp, rel), dst)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+@app.route("/maj/state")
+def maj_state():
+    if not logged():
+        return jsonify({})
+    if not UPDATE_INFO:
+        return jsonify({})
+    return jsonify({"version": UPDATE_INFO["version"], "notes": UPDATE_INFO["notes"], "current": APP_VERSION})
+
+@app.route("/maj/apply", methods=["POST"])
+def maj_apply():
+    if not logged():
+        return ("", 403)
+    if not UPDATE_INFO:
+        return ("aucune mise a jour", 200)
+    try:
+        _upd_apply(UPDATE_INFO["man"])
+    except Exception as e:
+        return ("erreur: %s" % e, 200)
+
+    def _relaunch():
+        import time as _t
+        _t.sleep(0.7)
+        try:
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception:
+            os._exit(0)
+    import threading as _th
+    _th.Thread(target=_relaunch, daemon=True).start()
+    return ("ok", 200)
+
+# Verifie la disponibilite d'une MAJ au demarrage (thread, non bloquant)
+try:
+    import threading as _upd_th
+    _upd_th.Thread(target=_upd_check_bg, daemon=True).start()
+except Exception:
+    pass
 
 # ======================================================================
 #  IMPORTATION MASSIVE (dossiers d'une clé USB / disque, en local)
