@@ -1,7 +1,7 @@
 {
- "version": "2.1",
- "notes": "Corrections : le COLLAGE (Cmd+V) fonctionne desormais dans TOUS les champs de l'application (objectifs, diagnostic, examen, notes...) grace a un vrai menu Edition - L'export de la fiche en PDF enregistre le fichier dans Telechargements et revient a la fiche (plus de blocage sans retour arriere).",
- "ref": "88df7537df0f6bfb713b69a27098df9c96f661c0",
+ "version": "2.2",
+ "notes": "Nettoyage : les blocs Notes libres sont retires (inutiles depuis que le collage Cmd+V fonctionne dans tous les champs). En presentation, la touche N affiche maintenant les questions du staff.",
+ "ref": "12d936295de739b92f2f72f564c93de09ea39a3f",
  "files": [
   "app.py",
   "run_native.py",
