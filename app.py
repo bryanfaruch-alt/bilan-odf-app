@@ -19,6 +19,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
+APP_VERSION = "1.1"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -881,6 +882,9 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:none}
 .brand img{width:40px;height:40px;border-radius:11px;box-shadow:0 4px 12px rgba(0,0,0,.28)}
 .brand .bt{font-weight:750;font-size:16px;color:var(--ink);letter-spacing:-.2px}
 .brand .bs{font-size:11px;color:var(--sb-mut);margin-top:1px}
+.brand .bv{display:inline-block;margin-top:4px;font-size:10px;font-weight:700;letter-spacing:.3px;
+  color:var(--acc);background:rgba(47,92,168,.12);border:1px solid rgba(47,92,168,.30);
+  border-radius:999px;padding:1px 7px}
 .snav{display:flex;flex-direction:column;gap:3px;margin-top:6px}
 .snav .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--sb-mut);margin:14px 12px 6px;font-weight:700}
 .snav a{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;color:var(--sb-ink);font-weight:600;font-size:14px;transition:.15s}
@@ -999,7 +1003,7 @@ table.st{width:100%;border-collapse:collapse}table.st td{padding:6px 8px;border-
 {% set ep=request.endpoint %}
 <div class="shell">
   <aside class="sidebar">
-    <div class="brand"><img src="{{logo}}" alt=""><div><div class="bt">Bilan ODF</div><div class="bs">Gestion locale</div></div></div>
+    <div class="brand"><img src="{{logo}}" alt=""><div><div class="bt">Bilan ODF</div><div class="bs">Gestion locale</div><div class="bv">v{{version}}</div></div></div>
     <nav class="snav">
       <div class="lbl">Patient</div>
       <a href="{{url_for('dashboard')}}" class="{{'active' if ep in ('dashboard','suivi','patient','record','evolution','patient_edit') else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> Bibliothèque</a>
@@ -1038,7 +1042,7 @@ table.st{width:100%;border-collapse:collapse}table.st td{padding:6px 8px;border-
 // Ferme tout menu déroulant (badge statut, ⋮) quand on clique ailleurs, sans rien changer.
 document.addEventListener('click',function(e){document.querySelectorAll('details.menu[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open');});},true);</script>
 </body></html>"""
-def page(body, wide=False): return render_template_string(BASE, body=body, wide=wide, logo=LOGO_URI)
+def page(body, wide=False): return render_template_string(BASE, body=body, wide=wide, logo=LOGO_URI, version=APP_VERSION)
 
 
 @app.route("/radios")

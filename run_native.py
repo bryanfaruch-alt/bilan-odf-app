@@ -550,7 +550,10 @@ def _wait_ready(timeout=30):
 #  - ne touche JAMAIS aux donnees patients (~/BilanODF_Data).
 #  - silencieux si hors-ligne. Desactive si GH_OWNER vide ou app "gelee".
 # ======================================================================
-APP_VERSION = "1"                       # version installee (bumpee a chaque publication)
+try:
+    from app import APP_VERSION          # source unique de la version (definie dans app.py)
+except Exception:
+    APP_VERSION = "1.0"
 GH_OWNER = "bryanfaruch-alt"            # compte GitHub (vide => MAJ desactivee)
 GH_REPO = "bilan-odf-app"
 GH_BRANCH = "main"
@@ -575,7 +578,7 @@ def _check_update():
     url = _raw_base() + "version.json?_=" + str(int(time.time()))
     try:
         req = urllib.request.Request(url, headers={"Cache-Control": "no-cache", "User-Agent": "BilanODF"})
-        with urllib.request.urlopen(req, timeout=6) as r:
+        with urllib.request.urlopen(req, timeout=3) as r:
             man = json.loads(r.read().decode("utf-8"))
     except Exception:
         return None
