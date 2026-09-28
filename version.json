@@ -1,7 +1,7 @@
 {
- "version": "2.0",
- "notes": "Nouveautes majeures : champ Notes libres (texte collable) dans chaque section - Completude du bilan en un coup d'oeil - Copier la synthese - Dupliquer un bilan en reevaluation - Export de la fiche en PDF - Corbeille restaurable en un clic - Statut modifiable depuis le dossier - Glisser-deposer des fichiers - Minuteur et notes de presentateur en staff - Reordonner les temps du staff - Raccourcis d'onglets (1-6, fleches) - Avertissement si modifications non enregistrees.",
- "ref": "84a6b111b5b7d2a3016e9fd87415462f380eeed5",
+ "version": "2.1",
+ "notes": "Corrections : le COLLAGE (Cmd+V) fonctionne desormais dans TOUS les champs de l'application (objectifs, diagnostic, examen, notes...) grace a un vrai menu Edition - L'export de la fiche en PDF enregistre le fichier dans Telechargements et revient a la fiche (plus de blocage sans retour arriere).",
+ "ref": "88df7537df0f6bfb713b69a27098df9c96f661c0",
  "files": [
   "app.py",
   "run_native.py",
