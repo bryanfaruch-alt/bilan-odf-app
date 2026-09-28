@@ -435,6 +435,36 @@ mk();setInterval(mk,1500);
     delegate = AppDelegate.alloc().init()
     app.setDelegate_(delegate)
 
+    # --- Menu principal (INDISPENSABLE pour que Cmd+C / Cmd+V / Cmd+X fonctionnent
+    #     dans les champs de la WebView : sans menu Edition, WKWebView ne recoit pas
+    #     ces raccourcis, donc IMPOSSIBLE de coller du texte quelque part dans l'app). ---
+    try:
+        from AppKit import NSMenu, NSMenuItem, NSEventModifierFlagShift, NSEventModifierFlagCommand
+        _mainmenu = NSMenu.alloc().init()
+        # Menu application (Quitter)
+        _appItem = NSMenuItem.alloc().init(); _mainmenu.addItem_(_appItem)
+        _appMenu = NSMenu.alloc().init()
+        _appMenu.addItemWithTitle_action_keyEquivalent_("Masquer Bilan ODF", "hide:", "h")
+        _appMenu.addItem_(NSMenuItem.separatorItem())
+        _appMenu.addItemWithTitle_action_keyEquivalent_("Quitter Bilan ODF", "terminate:", "q")
+        _appItem.setSubmenu_(_appMenu)
+        # Menu Edition (Annuler / Retablir / Couper / Copier / Coller / Tout selectionner)
+        _edItem = NSMenuItem.alloc().init(); _mainmenu.addItem_(_edItem)
+        _edMenu = NSMenu.alloc().initWithTitle_("Édition")
+        _edMenu.addItemWithTitle_action_keyEquivalent_("Annuler", "undo:", "z")
+        _rit = _edMenu.addItemWithTitle_action_keyEquivalent_("Rétablir", "redo:", "z")
+        try: _rit.setKeyEquivalentModifierMask_(NSEventModifierFlagShift | NSEventModifierFlagCommand)
+        except Exception: pass
+        _edMenu.addItem_(NSMenuItem.separatorItem())
+        _edMenu.addItemWithTitle_action_keyEquivalent_("Couper", "cut:", "x")
+        _edMenu.addItemWithTitle_action_keyEquivalent_("Copier", "copy:", "c")
+        _edMenu.addItemWithTitle_action_keyEquivalent_("Coller", "paste:", "v")
+        _edMenu.addItemWithTitle_action_keyEquivalent_("Tout sélectionner", "selectAll:", "a")
+        _edItem.setSubmenu_(_edMenu)
+        app.setMainMenu_(_mainmenu)
+    except Exception as _e:
+        print("menu principal indisponible (%s)" % _e)
+
     rect = NSMakeRect(0, 0, 1260, 860)
     win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(rect, STYLE, NSBackingStoreBuffered, False)
     win.setTitle_("Bilan ODF")

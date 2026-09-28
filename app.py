@@ -19,7 +19,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "2.0"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "2.1"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -4374,12 +4374,19 @@ def fiche_pdf(slug):
     story.append(Paragraph("Document généré localement par Bilan ODF le %s — données confidentielles."
                            % datetime.date.today().strftime("%d/%m/%Y"),
                            ParagraphStyle("F", parent=ss["Normal"], fontSize=8, textColor=colors.HexColor("#9aa4b2"))))
-    buf = io.BytesIO()
-    SimpleDocTemplate(buf, pagesize=A4, topMargin=18 * mm, bottomMargin=16 * mm,
+    # Enregistrement direct dans Téléchargements puis retour à la fiche
+    # (dans l'app native, naviguer vers le PDF piège la fenêtre : pas de retour arrière).
+    dl = os.path.expanduser("~/Downloads")
+    if not os.path.isdir(dl): dl = os.path.expanduser("~/Desktop")
+    if not os.path.isdir(dl): dl = os.path.expanduser("~")
+    out = os.path.join(dl, "Fiche_%s.pdf" % _safe_name(pt.get("nom", "patient")))
+    _b, _ext = os.path.splitext(out); _i = 1
+    while os.path.exists(out):
+        out = "%s (%d)%s" % (_b, _i, _ext); _i += 1
+    SimpleDocTemplate(out, pagesize=A4, topMargin=18 * mm, bottomMargin=16 * mm,
                       leftMargin=18 * mm, rightMargin=18 * mm, title="Fiche patient").build(story)
-    buf.seek(0)
-    return send_file(buf, mimetype="application/pdf", as_attachment=True,
-                     download_name="Fiche_%s.pdf" % _safe_name(pt.get("nom", "patient")))
+    flash("Fiche PDF enregistrée dans Téléchargements : %s" % os.path.basename(out))
+    return redirect(url_for("patient_edit", slug=slug))
 
 # ---- gestion d'un enregistrement : date/libellé + suppression (corbeille) ----
 @app.route("/record/<slug>/<rid>/setmeta", methods=["POST"])
