@@ -1,7 +1,7 @@
 {
- "version": "1.9",
- "notes": "Confort et ergonomie : recherche tolerante aux accents, liste triable avec date de derniere modif, fil d'Ariane et age recalcule, barre d'enregistrement toujours visible + bouton Annuler, confirmations avant suppression, raccourcis clavier (\"/\" recherche, Echap ferme), retour visuel (toasts, barre de chargement, bouton retour en haut) et nombreuses finitions.",
- "ref": "d7fb30dfa73f7e3a974ee1c0063355824e630e46",
+ "version": "2.0",
+ "notes": "Nouveautes majeures : champ Notes libres (texte collable) dans chaque section - Completude du bilan en un coup d'oeil - Copier la synthese - Dupliquer un bilan en reevaluation - Export de la fiche en PDF - Corbeille restaurable en un clic - Statut modifiable depuis le dossier - Glisser-deposer des fichiers - Minuteur et notes de presentateur en staff - Reordonner les temps du staff - Raccourcis d'onglets (1-6, fleches) - Avertissement si modifications non enregistrees.",
+ "ref": "84a6b111b5b7d2a3016e9fd87415462f380eeed5",
  "files": [
   "app.py",
   "run_native.py",
