@@ -1056,11 +1056,11 @@ document.addEventListener('click',function(e){document.querySelectorAll('details
   </div>
 </div>
 <script>
-(function(){var tries=0;function show(d){var t=document.getElementById('majTxt');
+(function(){var NL=String.fromCharCode(10);var tries=0;function show(d){var t=document.getElementById('majTxt');
     var s='Une nouvelle version (v'+d.version+') de Bilan ODF est disponible';
     if(d.current)s+=' (vous avez la v'+d.current+')';s+='.';
-    if(d.notes)s+='\n\n'+d.notes;
-    s+='\n\nInstaller maintenant et relancer l\'application ?';
+    if(d.notes)s+=NL+NL+d.notes;
+    s+=NL+NL+'Installer maintenant et relancer l’application ?';
     t.textContent=s;document.getElementById('majModal').style.display='flex';}
   function chk(){fetch('/maj/state').then(function(r){return r.json();}).then(function(d){
     if(d&&d.version){show(d);} else if(tries++<8){setTimeout(chk,3000);}
