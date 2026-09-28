@@ -19,7 +19,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "1.7"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "1.8"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -1040,7 +1040,18 @@ table.st{width:100%;border-collapse:collapse}table.st td{padding:6px 8px;border-
 {% endif %}
 <script>function openPlat(which,el,ev){if(ev){ev.preventDefault();ev.stopPropagation();}var nom=(el&&el.getAttribute('data-nom'))||'';try{window.webkit.messageHandlers.bilan.postMessage('open_'+which+':'+nom);}catch(e){}return false;}
 // Ferme tout menu déroulant (badge statut, ⋮) quand on clique ailleurs, sans rien changer.
-document.addEventListener('click',function(e){document.querySelectorAll('details.menu[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open');});},true);</script>
+document.addEventListener('click',function(e){document.querySelectorAll('details.menu[open]').forEach(function(d){if(!d.contains(e.target))d.removeAttribute('open');});},true);
+// Retour visuel « en cours » + anti double-clic pour les actions lentes (transfert, aperçu, régénération).
+window.slowGo=function(el,msg){
+  if(el.getAttribute('data-busy'))return false;
+  el.setAttribute('data-busy','1');
+  try{el.style.opacity='.55';el.style.pointerEvents='none';}catch(e){}
+  var t=document.getElementById('__toast');
+  if(!t){t=document.createElement('div');t.id='__toast';t.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#16324f;color:#fff;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 10px 34px rgba(0,0,0,.32);z-index:99998;display:flex;align-items:center;gap:10px';document.body.appendChild(t);}
+  t.innerHTML='<span style="display:inline-block;width:15px;height:15px;border:3px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:s 1s linear infinite"></span> '+msg;
+  t.style.display='flex';
+  setTimeout(function(){try{el.removeAttribute('data-busy');el.style.opacity='';el.style.pointerEvents='';}catch(e){}if(t)t.style.display='none';},12000);
+  return true;};</script>
 <div id=majModal style="display:none;position:fixed;inset:0;background:rgba(8,12,20,.55);z-index:99999;align-items:center;justify-content:center">
   <div style="background:var(--card,#fff);color:var(--ink,#1f2a37);max-width:450px;width:92%;border-radius:16px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.4);border:1px solid var(--line,#e5e7eb)">
     <div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
@@ -1101,18 +1112,18 @@ def radios():
         if lst: recs[slug] = lst; names[slug] = nom
     popts = "".join('<option value="%s">%s</option>' % (sl, names[sl]) for sl in sorted(names, key=lambda x: names[x].lower()))
     fopts = "".join('<option value="%s">%s</option>' % (f, f) for f in files)
-    finfo = ("%d radio(s) telecharged(s) en attente." % len(files)) if files else "Aucune radio telechargee pour l'instant. Ouvre un site, connecte-toi, telecharge une radio : elle apparaitra ici."
+    finfo = ("%d radio(s) téléchargée(s) en attente." % len(files)) if files else "Aucune radio téléchargée pour l'instant. Ouvre un site, connecte-toi, télécharge une radio : elle apparaîtra ici."
     import json as _j
     _HEAD = '<div class=phead><h1>Radios &amp; tracés à classer</h1><div class=sub>Récupérer une radio (XERO) ou un tracé (WebCeph) et le placer sur un bilan</div></div>'
     _STYLE = '<style>.rcard{background:var(--card);border:1px solid var(--line);border-radius:var(--rad);padding:22px 24px;margin-bottom:20px;box-shadow:var(--sh-sm)}.rhint{margin-top:16px;padding:12px 14px;background:var(--card2);border:1px solid var(--line);border-radius:12px;font-size:13px;color:var(--mut)}.inbgal{display:flex;gap:12px;flex-wrap:wrap;margin:6px 0 2px}.inbthumb{position:relative;cursor:pointer;border:2px solid var(--line);border-radius:12px;overflow:hidden;width:154px;background:var(--card2);transition:.15s}.inbthumb:hover{border-color:#cdd9e6}.inbthumb img{display:block;width:154px;height:112px;object-fit:cover}.inbthumb .cap{font-size:11px;color:var(--mut);padding:5px 8px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.inbthumb input{position:absolute;opacity:0;pointer-events:none}.inbthumb:has(input:checked){border-color:var(--acc);box-shadow:0 0 0 3px rgba(30,138,208,.16)}.inbthumb:has(input:checked)::after{content:"";position:absolute;top:7px;right:7px;width:20px;height:20px;border-radius:50%;background:var(--acc);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}.rempty{padding:26px;text-align:center;color:var(--mut);background:var(--card2);border:1px dashed var(--line);border-radius:12px}.curradio{display:inline-block;margin:10px 14px 0 0;vertical-align:top;text-align:center}.curradio img{max-height:150px;max-width:230px;border:1px solid var(--line);border-radius:10px;display:block}</style>'
-    _C1 = '<div class=rcard><div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><div style="flex:0 0 auto;width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,var(--acc),var(--teal));display:flex;align-items:center;justify-content:center"><svg width=26 height=26 viewBox="0 0 24 24" fill=none stroke=#fff stroke-width=2><rect x=3 y=4 width=18 height=16 rx=2></rect><line x1=8 y1=4 x2=8 y2=20></line><line x1=16 y1=4 x2=16 y2=20></line></svg></div><div style="flex:1;min-width:220px"><div style="font-weight:800;font-size:15px;color:var(--ink)">XERO &mdash; CHU Nice</div><div class=muted>Le site s\'ouvre dans une fenetre integree a l\'app et garde ta session. Tes identifiants ne sont jamais enregistres.</div></div><a class=btn href="#" onclick="try{window.webkit.messageHandlers.bilan.postMessage(`open_xero`)}catch(e){}; return false;">Ouvrir XERO</a></div><div class=rhint><b style="color:var(--ink)">Comment faire</b> &mdash; connecte-toi, affiche la radio du patient, puis clique le bouton bleu &laquo; Recuperer cette radio &raquo; en bas de la fenetre. Elle apparaitra ci-dessous.</div></div>'
-    _C2A = '<div class=rcard><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px"><h2 style="margin:0">Radios recuperees</h2>'
+    _C1 = '<div class=rcard><div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><div style="flex:0 0 auto;width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,var(--acc),var(--teal));display:flex;align-items:center;justify-content:center"><svg width=26 height=26 viewBox="0 0 24 24" fill=none stroke=#fff stroke-width=2><rect x=3 y=4 width=18 height=16 rx=2></rect><line x1=8 y1=4 x2=8 y2=20></line><line x1=16 y1=4 x2=16 y2=20></line></svg></div><div style="flex:1;min-width:220px"><div style="font-weight:800;font-size:15px;color:var(--ink)">XERO &mdash; CHU Nice</div><div class=muted>Le site s\'ouvre dans une fenêtre intégrée à l\'app et garde ta session. Tes identifiants ne sont jamais enregistrés.</div></div><a class=btn href="#" onclick="try{window.webkit.messageHandlers.bilan.postMessage(`open_xero`)}catch(e){}; return false;">Ouvrir XERO</a></div><div class=rhint><b style="color:var(--ink)">Comment faire</b> &mdash; connecte-toi, affiche la radio du patient, puis clique le bouton bleu &laquo; Récupérer cette radio &raquo; en bas de la fenêtre. Elle apparaîtra ci-dessous.</div></div>'
+    _C2A = '<div class=rcard><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px"><h2 style="margin:0">Radios récupérées</h2>'
     _C2B = '</div><p class=muted style="margin:0 0 4px">Choisis la radio a placer, puis le patient et le temps.</p><form method=post action="/radios/attach" enctype=multipart/form-data>'
     _C2C = '<div class="grid g2" style="margin-top:16px"><div><label>Patient</label><select id=selp name=slug onchange=fillRecs()>'
-    _C2D = '</select></div><div><label>Reevaluation</label><select id=selr name=rid onchange=loadCur()></select></div><div><label>Type de radio</label><select name=type><option value=panoramique>Panoramique</option><option value=teleradiographie_profil>Teleradiographie de profil</option><option value=trace_cephalo>Tracé céphalométrique</option></select></div><div><label>... ou importer un fichier</label><input type=file name=file accept="image/*"></div></div><div style="margin-top:16px"><button class=btn type=submit>Attacher la radio</button></div></form><div id=curradios style="margin-top:16px"></div></div>'
-    _EMPTY = "<div class=rempty>Aucune radio recuperee pour l'instant.<br>Ouvre XERO, affiche une radio et clique &laquo; Recuperer cette radio &raquo;.</div>"
+    _C2D = '</select></div><div><label>Réévaluation</label><select id=selr name=rid onchange=loadCur()></select></div><div><label>Type de radio</label><select name=type><option value=panoramique>Panoramique</option><option value=teleradiographie_profil>Téléradiographie de profil</option><option value=trace_cephalo>Tracé céphalométrique</option></select></div><div><label>... ou importer un fichier</label><input type=file name=file accept="image/*"></div></div><div style="margin-top:16px"><button class=btn type=submit>Attacher la radio</button></div></form><div id=curradios style="margin-top:16px"></div></div>'
+    _EMPTY = "<div class=rempty>Aucune radio récupérée pour l'instant.<br>Ouvre XERO, affiche une radio et clique &laquo; Récupérer cette radio &raquo;.</div>"
     _JSA = '<script>var RECS='
-    _JSB = ';\nfunction fillRecs(){var s=document.getElementById(\'selp\').value;var rs=document.getElementById(\'selr\');rs.innerHTML=\'\';(RECS[s]||[]).forEach(function(r){var o=document.createElement(\'option\');o.value=r.rid;o.textContent=r.label;rs.appendChild(o);});loadCur();}\nfunction loadCur(){var s=document.getElementById(\'selp\').value,r=document.getElementById(\'selr\').value;var box=document.getElementById(\'curradios\');if(!s||!r){box.innerHTML=\'\';return;}\nfetch(\'/radios/record_radios?slug=\'+encodeURIComponent(s)+\'&rid=\'+encodeURIComponent(r)).then(function(x){return x.json();}).then(function(d){var LBL={panoramique:\'Panoramique\',teleradiographie_profil:\'Teleradiographie de profil\'};var h=\'\';Object.keys(d).forEach(function(k){h+=\'<div class=curradio><div class=muted style="font-size:12px;margin-bottom:4px">\'+LBL[k]+\'</div><img src="\'+d[k]+\'"><form method=post action="/radios/delete" style="margin:6px 0 0"><input type=hidden name=slug value="\'+s+\'"><input type=hidden name=rid value="\'+r+\'"><input type=hidden name=type value="\'+k+\'"><button class="btn sec" type=submit style="font-size:12px;padding:4px 10px">Supprimer</button></form></div>\';});box.innerHTML=h?(\'<div style="font-weight:700;font-size:13px;margin:6px 0 2px;color:var(--ink)">Deja sur ce bilan</div>\'+h):\'\';});}\nwindow.addEventListener(\'load\',function(){fillRecs();});</script>'
+    _JSB = ';\nfunction fillRecs(){var s=document.getElementById(\'selp\').value;var rs=document.getElementById(\'selr\');rs.innerHTML=\'\';(RECS[s]||[]).forEach(function(r){var o=document.createElement(\'option\');o.value=r.rid;o.textContent=r.label;rs.appendChild(o);});loadCur();}\nfunction loadCur(){var s=document.getElementById(\'selp\').value,r=document.getElementById(\'selr\').value;var box=document.getElementById(\'curradios\');if(!s||!r){box.innerHTML=\'\';return;}\nfetch(\'/radios/record_radios?slug=\'+encodeURIComponent(s)+\'&rid=\'+encodeURIComponent(r)).then(function(x){return x.json();}).then(function(d){var LBL={panoramique:\'Panoramique\',teleradiographie_profil:\'Téléradiographie de profil\'};var h=\'\';Object.keys(d).forEach(function(k){h+=\'<div class=curradio><div class=muted style="font-size:12px;margin-bottom:4px">\'+LBL[k]+\'</div><img src="\'+d[k]+\'"><form method=post action="/radios/delete" style="margin:6px 0 0"><input type=hidden name=slug value="\'+s+\'"><input type=hidden name=rid value="\'+r+\'"><input type=hidden name=type value="\'+k+\'"><button class="btn sec" type=submit style="font-size:12px;padding:4px 10px">Supprimer</button></form></div>\';});box.innerHTML=h?(\'<div style="font-weight:700;font-size:13px;margin:6px 0 2px;color:var(--ink)">Déjà sur ce bilan</div>\'+h):\'\';});}\nwindow.addEventListener(\'load\',function(){fillRecs();});</script>'
     _vider = ('<form method=post action="/radios/clear_inbox" style="margin:0"><button class="btn sec" type=submit>Vider la file</button></form>') if files else ''
     _thumbs = ''
     for _f in files:
@@ -1185,7 +1196,7 @@ def radios_delete():
 
 @app.route("/radios/capture", methods=["POST"])
 def radios_capture():
-    # recoit l'image affichee dans la fenetre XERO (captureee par le bouton injecte) -> inbox
+    # recoit l'image affichee dans la fenêtre XERO (captureee par le bouton injecte) -> inbox
     if request.form.get("t", "") != RADIO_CAP_TOKEN: return ("", 403)
     d = request.form.get("img", "")
     if not d.startswith("data:"): return ("", 400)
@@ -1231,14 +1242,14 @@ def radios_attach():
             except Exception as e:
                 flash("Image illisible : %s (les PDF ne sont pas encore geres, exporte en image)" % e)
         else:
-            flash("Choisis une radio telechargee ou importe un fichier.")
+            flash("Choisis une radio téléchargée ou importe un fichier.")
     if saved:
         try: _regenerate(slug, rid, pt, r, skip_stl=True)
         except Exception: pass
         if used_inbox:
             try: os.remove(used_inbox)
             except Exception: pass
-        lbl = {"panoramique": "Panoramique", "teleradiographie_profil": "Teleradiographie de profil", "trace_cephalo": "Trace cephalometrique"}[typ]
+        lbl = {"panoramique": "Panoramique", "teleradiographie_profil": "Téléradiographie de profil", "trace_cephalo": "Trace cephalometrique"}[typ]
         _w = "Trace" if typ == "trace_cephalo" else "Radio"
         flash("%s (%s) attache a %s." % (_w, lbl, (pt.get("nom") or slug)))
     return redirect(url_for("radios"))
@@ -2121,7 +2132,7 @@ def patient(slug):
     <div class=card><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:10px;flex-wrap:wrap">
     <b>Bilans &amp; réévaluations</b>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <a class="btn sec" href="%s" title="Génère un Word complet + un dossier brut (Photos/Radios/STL) dans Téléchargements">&#128194; Transfert de dossier</a>
+      <a class="btn sec" href="%s" title="Génère un dossier complet (PDF + Photos/Radios/STL) dans Téléchargements" onclick="return slowGo(this,'G&eacute;n&eacute;ration du dossier… (quelques secondes)')">&#128194; Transfert de dossier</a>
       <a class=btn href="%s">+ Nouvelle réévaluation</a></div></div>
     <div class=reclist>%s</div></div>""" % (
         phead(slug, pt, "bilans"), url_for("transfert_dossier", slug=slug), url_for("reeval", slug=slug),
@@ -2454,7 +2465,7 @@ EVO_VIEWS = [
     ("endo_occlusal_maxillaire", "Occlusal maxillaire", "photo"),
     ("endo_occlusal_mandibulaire", "Occlusal mandibulaire", "photo"),
     ("panoramique", "Panoramique", "radio"),
-    ("teleradiographie_profil", "Teleradiographie de profil", "radio"),
+    ("teleradiographie_profil", "Téléradiographie de profil", "radio"),
 ]
 
 def _view_options_html(checked=None):
@@ -2567,7 +2578,7 @@ def _slides_for_record(slug, rid, pt, r, section_label=None, is_initial=False):
     if dcols:
         S.append(_sl("Synth&egrave;se diagnostique", '<div class=diag>%s</div>' % "".join(dcols), tp))
     # Plan de traitement (objectifs / moyens) : editable + synchro dossier.
-    # Affiche si bilan initial OU si deja rempli.
+    # Affiche si bilan initial OU si déjà rempli.
     plan = r.get("plan") or {}
     obj = str(plan.get("objectifs", "") or "")
     moy = str(plan.get("moyens", "") or "")
@@ -2863,7 +2874,7 @@ def _upd_apply(man):
             with open(p, "wb") as f:
                 f.write(data)
             got.append(rel)
-        # Verification : la version reellement telechargee doit correspondre a l'annonce
+        # Verification : la version reellement téléchargée doit correspondre a l'annonce
         vf = os.path.join(tmp, "app.py")
         want = str(man.get("version", "") or "")
         if want and os.path.exists(vf):
@@ -4040,7 +4051,7 @@ def doctolib_creds():
     if not pw:
         old = doctolib_creds_get(); pw = old.get("pw", "")
     if idv or pw:
-        doctolib_creds_set(idv, pw); flash("Identifiants Doctolib enregistres (Trousseau macOS).")
+        doctolib_creds_set(idv, pw); flash("Identifiants Doctolib enregistrés (Trousseau macOS).")
     else:
         flash("Renseigne l'identifiant et le mot de passe.")
     return redirect(url_for("reglages"))
@@ -4094,7 +4105,7 @@ def xero_creds():
     if not pw:
         old = xero_creds_get(); pw = old.get("pw", "")
     if idv or pw:
-        xero_creds_set(idv, pw); flash("Identifiants XERO enregistres (Trousseau macOS).")
+        xero_creds_set(idv, pw); flash("Identifiants XERO enregistrés (Trousseau macOS).")
     else:
         flash("Renseigne l'identifiant et le mot de passe.")
     return redirect(url_for("reglages"))
@@ -4148,7 +4159,7 @@ def webceph_creds():
     if not pw:
         old = webceph_creds_get(); pw = old.get("pw", "")
     if idv or pw:
-        webceph_creds_set(idv, pw); flash("Identifiants WebCeph enregistres (Trousseau macOS).")
+        webceph_creds_set(idv, pw); flash("Identifiants WebCeph enregistrés (Trousseau macOS).")
     else:
         flash("Renseigne l'identifiant et le mot de passe.")
     return redirect(url_for("reglages"))
@@ -4614,11 +4625,13 @@ def record(slug, rid):
     if r.get("status") == "error":
         banner = "<div class='flash err'>&#9888; Erreur : %s</div>" % r.get("error", "")
     # barre d'actions
-    dl = '<a class=btn href="%s">&#128196; Voir le bilan</a> ' % url_for("apercu", slug=slug, rid=rid)
+    dl = '<a class=btn href="%s" onclick="return slowGo(this,\'Ouverture du bilan\\u2026\')">&#128196; Voir le bilan</a> ' % url_for("apercu", slug=slug, rid=rid)
     if r.get("docx"): dl += '<a class="btn sec" href="%s">&#8681; Word</a> ' % u(r["docx"])
     if r.get("pdf"): dl += '<a class="btn sec" href="%s">&#8681; PDF</a> ' % u(r["pdf"])
-    dl += '<a class="btn" href="%s" style="background:var(--ink);border-color:var(--ink);color:var(--card)">&#128421; Pr&eacute;senter</a> ' % url_for("presentation", slug=slug, rid=rid)
-    dl += '<a class="btn sec" href="%s">&#128229; Import intelligent</a> <a class="btn sec" href="%s">&#128196; Valeurs depuis un Word</a> <a class="btn sec" href="%s">&#128260; R&eacute;g&eacute;n&eacute;rer</a> <a class="btn sec" href="%s">&#128193; Ouvrir le dossier</a> <a class="btn sec" href="%s">&#128200; Évolution</a>' % (
+    dl += '<a class="btn sec" href="%s">&#128421; Pr&eacute;senter</a> ' % url_for("presentation", slug=slug, rid=rid)
+    dl += ('<a class="btn sec" href="%s">&#128229; Import intelligent</a> <a class="btn sec" href="%s">&#128196; Valeurs depuis un Word</a> '
+           '<a class="btn sec" href="%s" onclick="return slowGo(this,\'R&eacute;g&eacute;n&eacute;ration\\u2026\')">&#128260; R&eacute;g&eacute;n&eacute;rer</a> '
+           '<a class="btn sec" href="%s">&#128193; Ouvrir le dossier</a> <a class="btn sec" href="%s">&#128200; &Eacute;volution</a>') % (
         url_for("import_upload", slug=slug, rid=rid), url_for("record_word_values", slug=slug, rid=rid), url_for("regen", slug=slug, rid=rid), url_for("openfolder", slug=slug, rid=rid), url_for("evolution", slug=slug))
     # 1) PHOTOS — emplacements de vues (déposer/assigner) + galerie + visionneuse
     PLBL = dict(PHOTO_FIELDS)
@@ -4787,7 +4800,7 @@ def record(slug, rid):
                  '<div class="grid g4">%s</div></details></div>') % (len(gal_cells), "".join(gal_cells))) if gal_cells else ""
     # 3) RADIOS
     rad = ""
-    for key, lbl in [("panoramique", "Panoramique"), ("teleradiographie_profil", "Teleradiographie de profil")]:
+    for key, lbl in [("panoramique", "Panoramique"), ("teleradiographie_profil", "Téléradiographie de profil")]:
         rel = "03_radios/%s.jpg" % key
         if ex_(rel): rad += ('<div style="position:relative"><img src="%s" onclick="lbShow(this.src,\'\')" style="width:100%%;border-radius:8px;border:1px solid #e3e8ef;cursor:zoom-in;display:block">' '<form method=post action="%s" style="margin:0;position:absolute;top:8px;right:8px"><button type=submit title="Supprimer cette radio" onclick="return confirm(\'Supprimer cette radiographie ?\')" style="width:30px;height:30px;border:none;border-radius:8px;background:rgba(200,40,40,.9);color:#fff;font-size:17px;line-height:1;cursor:pointer">&times;</button></form>' '<div class=muted style=text-align:center>%s</div>' '<form method=post action="%s" style="margin:3px 0 0;text-align:center"><button class="btn sec" type=submit style="font-size:11.5px;padding:3px 9px" title="Reclasser cette radio">&#8646; Reclasser en %s</button></form>' '</div>') % (u(rel), url_for("record_radio_delete", slug=slug, rid=rid, key=key), lbl, url_for("record_radio_retype", slug=slug, rid=rid, key=key), ("Téléradiographie de profil" if key == "panoramique" else "Panoramique"))
     # 4) ANALYSE RADIO (Steiner)
@@ -4826,7 +4839,7 @@ def record(slug, rid):
         '<p class=muted style=margin:8px_0>Depose un fichier seulement pour le remplacer, puis Enregistrer.</p>'
         '<div class="grid g4">%s</div><div class="grid g2" style="margin-top:10px">'
           '<div><label>Panoramique</label><input type=file name=radio_panoramique accept="image/*"></div>'
-          '<div><label>Teleradiographie</label><input type=file name=radio_teleradiographie_profil accept="image/*"></div>'
+          '<div><label>Téléradiographie</label><input type=file name=radio_teleradiographie_profil accept="image/*"></div>'
           '<div><label>STL superieur</label><input type=file name=stl_UpperJawScan accept=".stl"></div>'
           '<div><label>STL inferieur</label><input type=file name=stl_LowerJawScan accept=".stl"></div></div></details></div>'
       '<button type=submit class=btn>Enregistrer &amp; regenerer</button></form>') % (
@@ -5107,7 +5120,7 @@ def record_radio_retype(slug, rid, key):
             flash("Les deux radios ont ete interverties.")
         else:
             os.replace(src, dst)
-            flash("Radio reclassee en %s." % ("Teleradiographie de profil" if other == "teleradiographie_profil" else "Panoramique"))
+            flash("Radio reclassee en %s." % ("Téléradiographie de profil" if other == "teleradiographie_profil" else "Panoramique"))
         try: _regenerate(slug, rid, pt, r, skip_stl=True)
         except Exception: pass
     except Exception as e:
