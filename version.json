@@ -1,7 +1,7 @@
 {
- "version": "1.6",
- "notes": "Staff : analyse de Steiner juste apres les radios",
- "ref": "abd70550734c88560efd57f6683a69ccff739a88",
+ "version": "1.7",
+ "notes": "Confirmations avant suppression, retouche photo plus claire (au survol), finitions",
+ "ref": "c90463e9f9803ebd0033247104b334fec0dec132",
  "files": [
   "app.py",
   "run_native.py",
