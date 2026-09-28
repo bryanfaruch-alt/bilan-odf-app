@@ -1,0 +1,16 @@
+flask
+pillow
+numpy
+trimesh
+pyvista
+matplotlib
+python-docx
+certifi
+pyobjc-core
+pyobjc-framework-Cocoa
+pyobjc-framework-Quartz
+pyobjc-framework-WebKit
+pyobjc-framework-Security
+pyobjc-framework-UniformTypeIdentifiers
+pywebview
+reportlab

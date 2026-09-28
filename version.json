@@ -1,0 +1,5 @@
+{
+ "version": "1",
+ "notes": "Version initiale synchronisee.",
+ "files": ["app.py","run_native.py","pipeline.py","word_import.py","backup.py","mass_import.py","appareils_ext.py","bilan_pdf_rl.py","requirements.txt","assets/chu_nice.png"]
+}
