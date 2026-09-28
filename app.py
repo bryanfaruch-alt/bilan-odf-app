@@ -19,7 +19,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "1.6"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "1.7"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2112,7 +2112,7 @@ def patient(slug):
               <input name=label value="%s" style="width:100%%;margin:3px 0 11px">
               <button class="btn sm" style="width:100%%">Enregistrer</button></form>
             <div class=sep></div>
-            <a class=mi href="%s" style="color:#C0392B">&#128465; Supprimer (corbeille)</a>
+            <a class=mi href="%s" style="color:#C0392B" onclick="return confirm('Mettre ce bilan / temps clinique &agrave; la corbeille ?')">&#128465; Supprimer (corbeille)</a>
           </div></details></div>""") % (
             st, r.get("label", ""), sub, url_for("record", slug=slug, rid=rid),
             url_for("record_setmeta", slug=slug, rid=rid), dcur, lbl,
@@ -3601,7 +3601,7 @@ def patient_edit(slug):
       <div style="margin-top:16px"><button class=btn>Enregistrer</button></div></form>
     <div class=card style="max-width:560px"><h3 style="margin:0 0 6px;color:#C0392B">Zone sensible</h3>
       <p class=muted style="margin:0 0 10px">Supprimer ce patient le déplace dans une corbeille (récupérable), il n'est pas effacé définitivement.</p>
-      <a class="btn sec" href="%s" style="color:#C0392B">&#128465; Supprimer ce patient</a></div>""" % (
+      <a class="btn sec" href="%s" style="color:#C0392B" onclick="return confirm('Mettre ce patient &agrave; la corbeille ? (r&eacute;cup&eacute;rable)')">&#128465; Supprimer ce patient</a></div>""" % (
         phead(slug, pt, "fiche"), nom0.replace('"', "&quot;"), prenom0.replace('"', "&quot;"),
         pt.get("dob", ""), opts, stopts, (treatment_duration_txt(slug, pt) or "—"),
         url_for("patient_delete", slug=slug)))
@@ -4618,7 +4618,7 @@ def record(slug, rid):
     if r.get("docx"): dl += '<a class="btn sec" href="%s">&#8681; Word</a> ' % u(r["docx"])
     if r.get("pdf"): dl += '<a class="btn sec" href="%s">&#8681; PDF</a> ' % u(r["pdf"])
     dl += '<a class="btn" href="%s" style="background:var(--ink);border-color:var(--ink);color:var(--card)">&#128421; Pr&eacute;senter</a> ' % url_for("presentation", slug=slug, rid=rid)
-    dl += '<a class="btn sec" href="%s">&#128229; Import intelligent</a> <a class="btn sec" href="%s">&#128196; Valeurs depuis un Word</a> <a class="btn sec" href="%s">Regenerer</a> <a class="btn sec" href="%s">Ouvrir le dossier</a> <a class="btn sec" href="%s">&#128200; Évolution</a>' % (
+    dl += '<a class="btn sec" href="%s">&#128229; Import intelligent</a> <a class="btn sec" href="%s">&#128196; Valeurs depuis un Word</a> <a class="btn sec" href="%s">&#128260; R&eacute;g&eacute;n&eacute;rer</a> <a class="btn sec" href="%s">&#128193; Ouvrir le dossier</a> <a class="btn sec" href="%s">&#128200; Évolution</a>' % (
         url_for("import_upload", slug=slug, rid=rid), url_for("record_word_values", slug=slug, rid=rid), url_for("regen", slug=slug, rid=rid), url_for("openfolder", slug=slug, rid=rid), url_for("evolution", slug=slug))
     # 1) PHOTOS — emplacements de vues (déposer/assigner) + galerie + visionneuse
     PLBL = dict(PHOTO_FIELDS)
@@ -4647,10 +4647,10 @@ def record(slug, rid):
             inner = ('<img src="%s" class=slotimg loading=lazy decoding=async onclick="lbShow(\'%s\',null)">'
                      '<a class=slotcrop href="%s" title="Recadrer / orienter">&#9986;</a>'
                      '<form method=post action="%s" style="margin:0">'
-                     '<button type=submit class=slotdel title="Retirer cette photo de cette vue">&times;</button></form>'
+                     '<button type=submit class=slotdel title="Retirer cette photo de cette vue" onclick="return confirm(\'Retirer cette photo de cette vue ?\')">&times;</button></form>'
                      '<div class=slotorient style="position:absolute;left:6px;bottom:6px;display:flex;gap:4px">'
-                     '<form method=post action="%s" style="margin:0"><button type=submit title="Pivoter a gauche" style="width:26px;height:26px;padding:0;border:none;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;font-size:14px">&#8634;</button></form>'
-                     '<form method=post action="%s" style="margin:0"><button type=submit title="Pivoter a droite" style="width:26px;height:26px;padding:0;border:none;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;font-size:14px">&#8635;</button></form>'
+                     '<form method=post action="%s" style="margin:0"><button type=submit title="Pivoter &agrave; gauche" style="width:26px;height:26px;padding:0;border:none;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;font-size:14px">&#8634;</button></form>'
+                     '<form method=post action="%s" style="margin:0"><button type=submit title="Pivoter &agrave; droite" style="width:26px;height:26px;padding:0;border:none;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;font-size:14px">&#8635;</button></form>'
                      '<form method=post action="%s" style="margin:0"><button type=submit title="Miroir horizontal" style="width:26px;height:26px;padding:0;border:none;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;font-size:14px">&#8646;</button></form>'
                      '<form method=post action="%s" style="margin:0"><button type=submit title="Retourner vertical" style="width:26px;height:26px;padding:0;border:none;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;font-size:14px">&#8693;</button></form>'
                      '</div>'
@@ -4696,6 +4696,8 @@ def record(slug, rid):
     .slotcrop{position:absolute;top:6px;right:6px;background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:6px;padding:0 6px;font-size:13px;text-decoration:none}
     .slotdel{position:absolute;top:6px;left:6px;width:24px;height:24px;line-height:1;background:rgba(255,255,255,.92);border:1px solid #f3c0ba;border-radius:6px;color:#C0392B;font-size:17px;font-weight:800;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
     .slotdel:hover{background:#C0392B;color:#fff;border-color:#C0392B}
+    .slotcrop,.slotdel,.slotorient{opacity:0;transition:opacity .13s ease}
+    .slot:hover .slotcrop,.slot:hover .slotdel,.slot:hover .slotorient,.slot:focus-within .slotcrop,.slot:focus-within .slotdel,.slot:focus-within .slotorient{opacity:1}
     .slotempty{display:flex;align-items:center;justify-content:center;height:90px;border:2px dashed #c7d2e5;border-radius:8px;color:#93a3bd;font-size:12.5px;text-align:center}
     .galgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
     .galimg{width:100%;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:grab;background:#fafbfd}
@@ -4787,7 +4789,7 @@ def record(slug, rid):
     rad = ""
     for key, lbl in [("panoramique", "Panoramique"), ("teleradiographie_profil", "Teleradiographie de profil")]:
         rel = "03_radios/%s.jpg" % key
-        if ex_(rel): rad += ('<div style="position:relative"><img src="%s" onclick="lbShow(this.src,\'\')" style="width:100%%;border-radius:8px;border:1px solid #e3e8ef;cursor:zoom-in;display:block">' '<form method=post action="%s" style="margin:0;position:absolute;top:8px;right:8px"><button type=submit title="Supprimer cette radio" style="width:30px;height:30px;border:none;border-radius:8px;background:rgba(200,40,40,.9);color:#fff;font-size:17px;line-height:1;cursor:pointer">&times;</button></form>' '<div class=muted style=text-align:center>%s</div>' '<form method=post action="%s" style="margin:3px 0 0;text-align:center"><button class="btn sec" type=submit style="font-size:11.5px;padding:3px 9px" title="Reclasser cette radio">&#8646; Reclasser en %s</button></form>' '</div>') % (u(rel), url_for("record_radio_delete", slug=slug, rid=rid, key=key), lbl, url_for("record_radio_retype", slug=slug, rid=rid, key=key), ("Téléradiographie de profil" if key == "panoramique" else "Panoramique"))
+        if ex_(rel): rad += ('<div style="position:relative"><img src="%s" onclick="lbShow(this.src,\'\')" style="width:100%%;border-radius:8px;border:1px solid #e3e8ef;cursor:zoom-in;display:block">' '<form method=post action="%s" style="margin:0;position:absolute;top:8px;right:8px"><button type=submit title="Supprimer cette radio" onclick="return confirm(\'Supprimer cette radiographie ?\')" style="width:30px;height:30px;border:none;border-radius:8px;background:rgba(200,40,40,.9);color:#fff;font-size:17px;line-height:1;cursor:pointer">&times;</button></form>' '<div class=muted style=text-align:center>%s</div>' '<form method=post action="%s" style="margin:3px 0 0;text-align:center"><button class="btn sec" type=submit style="font-size:11.5px;padding:3px 9px" title="Reclasser cette radio">&#8646; Reclasser en %s</button></form>' '</div>') % (u(rel), url_for("record_radio_delete", slug=slug, rid=rid, key=key), lbl, url_for("record_radio_retype", slug=slug, rid=rid, key=key), ("Téléradiographie de profil" if key == "panoramique" else "Panoramique"))
     # 4) ANALYSE RADIO (Steiner)
     steiner_graph = ('<div style="margin-bottom:14px">%s</div>' % steiner_table_html(r)) if r.get("steiner") else ""
     steiner_inputs = "".join('<div><label>%s</label><input name="st_%s" inputmode=decimal value="%s" autocomplete=off></div>'
