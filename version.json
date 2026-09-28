@@ -1,7 +1,7 @@
 {
- "version": "1.5",
- "notes": "Fiabilisation MAJ (commit fige)",
- "ref": "2ba50f58d58304e3d63ac21fe86c8b22c1dbeadd",
+ "version": "1.6",
+ "notes": "Staff : analyse de Steiner juste apres les radios",
+ "ref": "abd70550734c88560efd57f6683a69ccff739a88",
  "files": [
   "app.py",
   "run_native.py",
