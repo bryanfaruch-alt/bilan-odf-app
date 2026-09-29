@@ -1,7 +1,7 @@
 {
- "version": "2.4",
- "notes": "Vitesse : l'application DEMARRE beaucoup plus vite (les grosses librairies 3D/PDF/Word ne se chargent plus au lancement mais seulement au 1er usage). Import : \"Importer un patient\" accepte maintenant AUSSI un ZIP \"Transfert de dossier\" et le reconstruit instantanement (photos/radios placees par nom, rendus 3D reutilises) - fini l'import en vrac lent et mal detecte.",
- "ref": "72b3837aec60bdcf614643f0c6a19c813c12ee8e",
+ "version": "2.5",
+ "notes": "Import plus pratique : cliquer sur la zone ouvre le SELECTEUR macOS natif -> tu navigues partout (Bureau, Telechargements...) meme si l'app n'a pas d'acces disque (fini le 'dossier introuvable'). Tu peux aussi GLISSER le .zip depuis le Bureau, ou CHOISIR UN DOSSIER deja decompresse. Le .zip comme le dossier sont reconstruits instantanement.",
+ "ref": "c2a1427fa982073a0af09b56580f5a027d1ac6d9",
  "files": [
   "app.py",
   "run_native.py",
