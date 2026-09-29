@@ -1,7 +1,7 @@
 {
- "version": "2.6",
- "notes": "Le \"Transfert de dossier\" inclut desormais les donnees cliniques de chaque temps (motif de consultation, analyse de Steiner, synthese diagnostique, objectifs et moyens, examen, date reelle). A l'import via \"Importer un patient\", tout est remis en place automatiquement. (Les anciens transferts crees avant cette version ne les contiennent pas : re-exporter le dossier pour en profiter.)",
- "ref": "737b83ed1cf7f995cf82541b65f995ba57c88da0",
+ "version": "2.7",
+ "notes": "Import d'un bilan Word ameliore : selecteur natif macOS (tu navigues partout, Bureau compris), tu peux GLISSER les .docx ou choisir \"Des documents\" (fichiers) ou \"Un dossier\". Bonus : importe PLUSIEURS bilans .docx d'un coup (un patient cree par fichier).",
+ "ref": "8fdf24fdc1ff2024b09be0e0b4d83eecd78ada9a",
  "files": [
   "app.py",
   "run_native.py",
