@@ -398,8 +398,14 @@ mk();setInterval(mk,1500);
         def webView_runOpenPanelWithParameters_initiatedByFrame_completionHandler_(
                 self, web, params, frame, completionHandler):
             panel = NSOpenPanel.openPanel()
-            panel.setCanChooseFiles_(True)
-            panel.setCanChooseDirectories_(False)
+            # Autorise le choix d'un DOSSIER quand la page le demande (input webkitdirectory),
+            # sinon reste sur le choix de fichiers. Le sélecteur natif (powerbox) peut atteindre
+            # le Bureau/Téléchargements même si l'app n'a pas l'accès disque : c'est la sélection
+            # de l'utilisateur qui accorde l'accès.
+            try: _allow_dirs = bool(params.allowsDirectories())
+            except Exception: _allow_dirs = False
+            panel.setCanChooseFiles_(not _allow_dirs)
+            panel.setCanChooseDirectories_(_allow_dirs)
             panel.setResolvesAliases_(True)
             try:
                 panel.setAllowsMultipleSelection_(bool(params.allowsMultipleSelection()))

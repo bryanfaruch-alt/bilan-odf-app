@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "2.4"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "2.5"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2513,25 +2513,40 @@ def _import_transfert_zip(z, names):
 def import_patient():
     if not logged(): return redirect(url_for("login"))
     if request.method == "POST":
-        f = request.files.get("file")
-        if not f or not (f.filename or "").lower().endswith(".zip"):
-            flash("Choisis un fichier .zip (export patient ou dossier de transfert Bilan ODF)."); return redirect(url_for("import_patient"))
-        import zipfile, tempfile
-        tmp = tempfile.mkdtemp(); mode = None; newslug = None
+        import zipfile, io as _io
+        # Accepte un fichier .zip (name=file) OU un dossier décompressé (name=folder, webkitdirectory)
+        allf = [x for x in (request.files.getlist("file") + request.files.getlist("folder")) if x and x.filename]
+        if not allf:
+            flash("Choisis un fichier .zip ou un dossier (export patient ou dossier de transfert Bilan ODF)."); return redirect(url_for("import_patient"))
+        mode = None; newslug = None
         try:
-            zpath = os.path.join(tmp, "in.zip"); f.save(zpath)
-            with zipfile.ZipFile(zpath) as z:
+            if len(allf) == 1 and (allf[0].filename or "").lower().endswith(".zip"):
+                zbytes = allf[0].read()
+            else:
+                # dossier -> reconstruit un zip en mémoire à partir des chemins relatifs des fichiers
+                mem = _io.BytesIO()
+                with zipfile.ZipFile(mem, "w", zipfile.ZIP_DEFLATED) as zz:
+                    for uf in allf:
+                        rp = (uf.filename or "").replace("\\", "/").lstrip("/")
+                        if (not rp) or rp.endswith("/") or ".." in rp.split("/"): continue
+                        zz.writestr(rp, uf.read())
+                zbytes = mem.getvalue()
+            with zipfile.ZipFile(_io.BytesIO(zbytes)) as z:
                 names = z.namelist()
-                if "_bilanodf_export.json" in names and "patient/patient.json" in names:
+                # tolère un dossier de tête (ex. dossier décompressé) : préfixe commun éventuel
+                exp = next((n for n in names if n.endswith("_bilanodf_export.json")), None)
+                prefix = exp[:-len("_bilanodf_export.json")] if exp else ""
+                if exp is not None and (prefix + "patient/patient.json") in names:
                     # (1) Export patient Bilan ODF -> restauration A L'IDENTIQUE
-                    man = json.loads(z.read("_bilanodf_export.json").decode("utf-8"))
+                    man = json.loads(z.read(exp).decode("utf-8"))
                     nom = (man.get("nom", "") or "Patient importé")
                     newslug = slugify(nom) + "_" + datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
                     dest = pdir(newslug); os.makedirs(dest, exist_ok=True)
+                    base_p = prefix + "patient/"
                     for n in names:
-                        if not n.startswith("patient/"): continue
-                        rel = n[len("patient/"):]
-                        if (not rel) or rel.endswith("/") or ".." in rel or rel.startswith("/"): continue
+                        if not n.startswith(base_p): continue
+                        rel = n[len(base_p):]
+                        if (not rel) or rel.endswith("/") or ".." in rel.split("/") or rel.startswith("/"): continue
                         tp = os.path.join(dest, rel)
                         os.makedirs(os.path.dirname(tp) or dest, exist_ok=True)
                         with z.open(n) as sf, open(tp, "wb") as of:
@@ -2546,15 +2561,13 @@ def import_patient():
                     newslug = _import_transfert_zip(z, names)
                     mode = "transfert" if newslug else None
         except Exception as e:
-            shutil.rmtree(tmp, ignore_errors=True)
             flash("Import impossible : %s" % e); return redirect(url_for("import_patient"))
-        shutil.rmtree(tmp, ignore_errors=True)
         if not newslug:
-            flash("Ce .zip n'est ni un export patient, ni un dossier de transfert Bilan ODF."); return redirect(url_for("import_patient"))
+            flash("Fichier non reconnu : choisis un « Patient BilanODF - ….zip » ou un « Dossier ODF - … » (fichier .zip ou dossier)."); return redirect(url_for("import_patient"))
         if mode == "identique":
             flash("Patient importé à l'identique (aucune régénération nécessaire).")
         else:
-            flash("Dossier de transfert importé : photos, radios et modèles 3D placés instantanément. Les valeurs Steiner / synthèse ne font pas partie d'un transfert — à compléter si besoin.")
+            flash("Dossier importé : photos, radios et modèles 3D placés instantanément. Les valeurs Steiner / synthèse ne font pas partie d'un transfert — à compléter si besoin.")
         return redirect(url_for("suivi", slug=newslug))
     body = ('<p class=muted><a href="%s">← Bibliothèque</a></p><h1>Importer un patient</h1>'
             '<div class=flash style="background:var(--accw);border-color:var(--line)">Dépose ici un fichier <b>.zip</b> — '
@@ -2565,11 +2578,16 @@ def import_patient():
             '(les valeurs Steiner / synthèse n\'y sont pas incluses).<br>'
             'Dans les deux cas&nbsp;: <b>instantané</b>, sans régénération ni écran de vérification.</div>'
             '<div class=card><form method=post enctype=multipart/form-data '
-            'onsubmit="this.querySelector(\'button\').innerHTML=\'<span class=spin></span> Import…\'">%s'
+            'onsubmit="this.querySelector(\'button.btn\').innerHTML=\'<span class=spin></span> Import…\'">%s'
+            '<div class=muted style="margin-top:12px;font-size:13px">…ou, si tu as déjà <b>décompressé</b> le dossier&nbsp;: '
+            '<label class="btn sec sm" style="cursor:pointer;display:inline-flex">&#128193; Choisir un dossier'
+            '<input type=file name=folder webkitdirectory directory multiple style="display:none" '
+            'onchange="if(this.files.length){this.form.querySelector(\'button.btn\').innerHTML=\'<span class=spin></span> Import…\';this.form.submit();}"></label></div>'
             '<div style="margin-top:14px"><button class=btn type=submit>Importer</button></div></form></div>'
-            '<p class=muted style="font-size:13px">Pour un transfert <b>parfaitement identique</b>, préfère '
-            '« <b>Exporter le patient</b> » (chez l\'autre interne) plutôt que « Transfert de dossier ».</p>') % (
-        url_for("dashboard"), filedrop("file", accept=".zip", multiple=False, label="Glissez le fichier .zip ici, ou cliquez"))
+            '<p class=muted style="font-size:13px">Astuce&nbsp;: <b>pas besoin de décompresser</b> — glisse ou choisis directement le fichier <b>.zip</b>. '
+            'Le sélecteur qui s\'ouvre te laisse naviguer partout (Bureau, Téléchargements…), même si l\'app n\'a pas d\'accès disque.<br>'
+            'Pour un transfert <b>parfaitement identique</b>, préfère « <b>Exporter le patient</b> » (chez l\'autre interne) plutôt que « Transfert de dossier ».</p>') % (
+        url_for("dashboard"), filedrop("file", accept=".zip", multiple=False, label="Glissez le fichier .zip ici, ou cliquez pour parcourir"))
     return page(body, title="Importer un patient")
 
 # ======================================================================
@@ -4420,13 +4438,14 @@ def filedrop(name="files", accept="", multiple=True, label="Glissez vos fichiers
     mid = "fd" + secrets.token_hex(3)
     acc = (' accept="%s"' % accept) if accept else ""
     mult = " multiple" if multiple else ""
-    tpl = ('<label class=filedrop id="@ID@_l">'
-           '<input type=file name="@NAME@"@ACC@@MULT@ style="display:none" '
+    tpl = ('<div class=filedrop id="@ID@_l" onclick="document.getElementById(\'@ID@_i\').click()">'
+           '<input type=file id="@ID@_i" name="@NAME@"@ACC@@MULT@ '
+           'style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" '
            'onchange="var t=document.getElementById(\'@ID@_t\');t.textContent=this.files.length?this.files.length+\' fichier(s) prêt(s)\':\'@LBL@\';">'
            '<div style="font-size:30px;line-height:1">&#128228;</div>'
            '<div id="@ID@_t" class=filedrop-t>@LBL@</div>'
-           '<div class=muted style="font-size:12px;margin-top:2px">ou cliquez pour choisir</div></label>'
-           '<script>(function(){var l=document.getElementById("@ID@_l"),i=l.querySelector("input"),t=document.getElementById("@ID@_t");'
+           '<div class=muted style="font-size:12px;margin-top:2px">Cliquez pour parcourir votre ordinateur, ou glissez le fichier ici</div></div>'
+           '<script>(function(){var l=document.getElementById("@ID@_l"),i=document.getElementById("@ID@_i"),t=document.getElementById("@ID@_t");'
            '["dragenter","dragover"].forEach(function(ev){l.addEventListener(ev,function(e){e.preventDefault();e.stopPropagation();l.classList.add("over");});});'
            'l.addEventListener("dragleave",function(e){if(!l.contains(e.relatedTarget))l.classList.remove("over");});'
            'l.addEventListener("drop",function(e){e.preventDefault();e.stopPropagation();l.classList.remove("over");'
