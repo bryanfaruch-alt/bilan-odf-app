@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "2.8"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "2.9"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -1125,12 +1125,17 @@ document.addEventListener('DOMContentLoaded',function(){
   window.addEventListener('scroll',function(){tt.classList.toggle('on',window.scrollY>420);},{passive:true});
 });
 // v2.0 — memoire du dernier onglet patient + reecriture des liens sur la bibliotheque
+// IMPORTANT : ne memoriser/reecrire QUE les vraies pages d'onglet, jamais les liens
+// d'action (etoile /staffer, presenter, /statut, /delete...) sinon un clic dessus
+// ouvrirait le dossier au lieu de faire l'action.
 (function(){try{
-  var m=location.pathname.match(/^\/patient\/([^\/]+)/);
+  var TAB=/^\/patient\/([^\/]+)(?:\/(?:suivi|evolution|staff|documents|edit))?$/;
+  var m=location.pathname.match(TAB);
   if(m){localStorage.setItem('bilanTab_'+m[1],location.pathname+location.search);}
   if(location.pathname==='/'){
     document.querySelectorAll('a[href^="/patient/"]').forEach(function(a){
-      var mm=(a.getAttribute('href')||'').match(/^\/patient\/([^\/]+)/);if(!mm)return;
+      var mm=(a.getAttribute('href')||'').match(/^\/patient\/([^\/]+)(?:\/suivi)?$/);
+      if(!mm)return;                                   // uniquement le lien principal (fiche/suivi)
       var last=localStorage.getItem('bilanTab_'+mm[1]);if(last)a.setAttribute('href',last);});
   }
 }catch(e){}})();
