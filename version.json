@@ -1,7 +1,7 @@
 {
- "version": "2.2",
- "notes": "Nettoyage : les blocs Notes libres sont retires (inutiles depuis que le collage Cmd+V fonctionne dans tous les champs). En presentation, la touche N affiche maintenant les questions du staff.",
- "ref": "12d936295de739b92f2f72f564c93de09ea39a3f",
+ "version": "2.3",
+ "notes": "Nouveau : Export / Import patient entre postes Bilan ODF. Bouton \"Exporter le patient\" (fiche) -> un .zip qui contient TOUT le dossier (Steiner, synthese, plan, photos classees, rendus 3D). \"Importer un patient\" (page Nouveau patient) le restaure A L'IDENTIQUE, instantanement, sans regeneration ni ecran de verification. Ideal pour partager un patient entre internes (bien plus fiable et rapide que Transfert + import en vrac).",
+ "ref": "4e94b16dfa97317c966f22ce781b1b9107b24915",
  "files": [
   "app.py",
   "run_native.py",
