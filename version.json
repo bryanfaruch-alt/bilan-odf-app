@@ -1,7 +1,7 @@
 {
- "version": "2.8",
- "notes": "Version de test de la mise a jour automatique. Si tu vois ce message et que le numero en bas a gauche passe a 2.8 apres redemarrage : la mise a jour fonctionne !",
- "ref": "17277abda4cc6835b4f827967c0c30e0b238d99e",
+ "version": "2.9",
+ "notes": "Correction : depuis la bibliotheque, l'etoile 'a staffer' et l'icone 'a presenter' rebasculent bien au clic (avant, un clic ouvrait le dossier par erreur).",
+ "ref": "e281beacf157afa7ec6a733eba29f06619f79ca7",
  "files": [
   "app.py",
   "run_native.py",
