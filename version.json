@@ -1,7 +1,7 @@
 {
- "version": "2.3",
- "notes": "Nouveau : Export / Import patient entre postes Bilan ODF. Bouton \"Exporter le patient\" (fiche) -> un .zip qui contient TOUT le dossier (Steiner, synthese, plan, photos classees, rendus 3D). \"Importer un patient\" (page Nouveau patient) le restaure A L'IDENTIQUE, instantanement, sans regeneration ni ecran de verification. Ideal pour partager un patient entre internes (bien plus fiable et rapide que Transfert + import en vrac).",
- "ref": "4e94b16dfa97317c966f22ce781b1b9107b24915",
+ "version": "2.4",
+ "notes": "Vitesse : l'application DEMARRE beaucoup plus vite (les grosses librairies 3D/PDF/Word ne se chargent plus au lancement mais seulement au 1er usage). Import : \"Importer un patient\" accepte maintenant AUSSI un ZIP \"Transfert de dossier\" et le reconstruit instantanement (photos/radios placees par nom, rendus 3D reutilises) - fini l'import en vrac lent et mal detecte.",
+ "ref": "72b3837aec60bdcf614643f0c6a19c813c12ee8e",
  "files": [
   "app.py",
   "run_native.py",
