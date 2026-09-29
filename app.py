@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "2.6"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "2.7"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -6580,14 +6580,53 @@ def _word_summary_html(res):
             + box("Chevrons", chv, "aucun chevron lu")
             + '</div>' + (('<div class=card>%s</div>' % txtblocks) if txtblocks else ''))
 
+def _create_patient_from_word(docx_path):
+    """Lit un bilan Word et crée un patient + son bilan initial. Renvoie (slug, rid, nom)."""
+    res = WI.parse_word_bilan(docx_path)
+    p = res.get("patient", {})
+    nom = (p.get("nom") or "Patient importé").strip()
+    slug = slugify(nom) + "_" + datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+    dob = p.get("dob", "")
+    if dob: dob_court, age = age_from_dob(dob)
+    else: dob_court, age = "—", (p.get("age") or "—")
+    pt = {"slug": slug, "nom": nom, "dob": dob, "dob_court": dob_court, "age": age,
+          "sexe": p.get("sexe", "non précisé"), "auteur": session.get("user", ""),
+          "date_creation": datetime.datetime.now().isoformat(timespec="seconds"), "statut": "bilan", "records": []}
+    os.makedirs(pdir(slug), exist_ok=True); save_patient(slug, pt)
+    rid = create_empty_record(slug, "Bilan initial")
+    r = load_rec(slug, rid)
+    apply_word_to_record(r, res); save_rec(slug, rid, r)
+    try: _regenerate(slug, rid, pt, r, skip_stl=True)
+    except Exception: pass
+    return slug, rid, nom
+
 @app.route("/word_import", methods=["GET", "POST"])
 def word_import():
     if not logged(): return redirect(url_for("login"))
     if request.method == "POST":
-        f = request.files.get("docx")
-        if not f or not f.filename.lower().endswith(".docx"):
-            flash("Choisis un fichier Word (.docx).")
+        files = [x for x in (request.files.getlist("docx") + request.files.getlist("folder"))
+                 if x and (x.filename or "").lower().endswith(".docx")]
+        if not files:
+            flash("Choisis un ou plusieurs fichiers Word (.docx), ou un dossier qui en contient.")
             return redirect(url_for("word_import"))
+        if len(files) > 1:
+            # Plusieurs bilans -> import direct (un patient par .docx)
+            import tempfile
+            created = 0; errs = []
+            for uf in files:
+                _dt = tempfile.mkdtemp()
+                try:
+                    _tp = os.path.join(_dt, "b.docx"); uf.save(_tp)
+                    _create_patient_from_word(_tp); created += 1
+                except Exception as e:
+                    errs.append((os.path.basename(uf.filename or "?")) + " : " + str(e)[:40])
+                finally:
+                    shutil.rmtree(_dt, ignore_errors=True)
+            msg = "%d bilan(s) Word importé(s)." % created
+            if errs: msg += " Soucis : " + " | ".join(errs[:4])
+            flash(msg); return redirect(url_for("dashboard"))
+        # Un seul .docx -> aperçu puis confirmation
+        f = files[0]
         os.makedirs(DATA, exist_ok=True)
         f.save(WORD_STAGE)
         try:
@@ -6605,14 +6644,38 @@ def word_import():
                     url_for("dashboard"), (f.filename or "").replace("<", "&lt;"),
                     _word_summary_html(res), url_for("word_import_commit"), url_for("dashboard"))
         return page(body)
-    # GET : formulaire de dépôt
+    # GET : formulaire de dépôt (sélecteur natif + choix Documents / Dossier)
     body = ('<p class=muted><a href="%s">← Bibliothèque</a></p><h1>Importer un bilan Word</h1>'
-            '<div class=card><p>Dépose un bilan existant au format <b>Word (.docx)</b>. L\'app le lit et reporte '
+            '<div class=card><p>Importe un ou plusieurs bilans au format <b>Word (.docx)</b>. L\'app lit et reporte '
             'automatiquement l\'identité, l\'analyse de Steiner, l\'analyse d\'espace, la synthèse diagnostique, '
             'le motif et les objectifs/moyens dans un nouveau dossier patient.</p>'
-            '<form method=post enctype=multipart/form-data onsubmit="this.querySelector(\'button\').innerHTML=\'<span class=spin></span> Lecture…\'">'
-            '<input type=file name=docx accept=".docx" style="padding:18px;border:2px dashed #b9c6de;background:#f7f9fd">'
-            '<div style="margin-top:14px"><button class=btn>Lire le bilan</button></div></form></div>') % url_for("dashboard")
+            '<form method=post enctype=multipart/form-data id=wform '
+            'onsubmit="var b=document.getElementById(\'wsubmit\');if(b)b.innerHTML=\'<span class=spin></span> Lecture…\'">'
+            '<div class=filedrop id=wdrop>'
+            '<div style="font-size:30px;line-height:1">&#128228;</div>'
+            '<div class=filedrop-t>Glissez un ou plusieurs fichiers <b>.docx</b> ici</div>'
+            '<div class=muted style="font-size:12px;margin:2px 0 8px">…ou choisissez, en naviguant dans votre ordinateur&nbsp;:</div>'
+            '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'
+            '<button type=button class="btn sec sm" onclick="document.getElementById(\'wf_files\').click()">&#128196; Des documents Word</button>'
+            '<button type=button class="btn sec sm" onclick="document.getElementById(\'wf_folder\').click()">&#128193; Un dossier</button></div>'
+            '<input id=wf_files type=file name=docx accept=".docx" multiple style="display:none" onchange="wpick(this)">'
+            '<input id=wf_folder type=file name=folder webkitdirectory directory multiple style="display:none" onchange="wpick(this)">'
+            '</div>'
+            '<div id=wstatus class=muted style="margin-top:10px;font-weight:600"></div>'
+            '<div style="margin-top:14px"><button class=btn type=submit id=wsubmit disabled>Lire le(s) bilan(s)</button></div>'
+            '</form></div>'
+            '<script>'
+            'function wpick(inp){var other=inp.id===\'wf_files\'?document.getElementById(\'wf_folder\'):document.getElementById(\'wf_files\');'
+            'try{other.value=\'\';}catch(e){}'
+            'var n=0;for(var i=0;i<inp.files.length;i++){if((inp.files[i].name||\'\').toLowerCase().slice(-5)===\'.docx\')n++;}'
+            'var s=document.getElementById(\'wstatus\');s.textContent=n?(n+\' bilan(s) .docx prêt(s) à importer\'):\'Aucun .docx dans la sélection\';'
+            'document.getElementById(\'wsubmit\').disabled=(n===0);}'
+            '(function(){var z=document.getElementById(\'wdrop\'),fi=document.getElementById(\'wf_files\');'
+            '[\'dragenter\',\'dragover\'].forEach(function(e){z.addEventListener(e,function(ev){ev.preventDefault();z.classList.add(\'over\');});});'
+            'z.addEventListener(\'dragleave\',function(ev){if(!z.contains(ev.relatedTarget))z.classList.remove(\'over\');});'
+            'z.addEventListener(\'drop\',function(ev){ev.preventDefault();z.classList.remove(\'over\');'
+            'if(ev.dataTransfer&&ev.dataTransfer.files&&ev.dataTransfer.files.length){try{fi.files=ev.dataTransfer.files;}catch(_){}wpick(fi);}});})();'
+            '</script>') % url_for("dashboard")
     return page(body)
 
 @app.route("/word_import/commit", methods=["POST"])
@@ -6620,27 +6683,7 @@ def word_import_commit():
     if not logged(): return redirect(url_for("login"))
     if not os.path.exists(WORD_STAGE):
         flash("Aucun bilan en attente — recommence l'import."); return redirect(url_for("word_import"))
-    res = WI.parse_word_bilan(WORD_STAGE)
-    p = res.get("patient", {})
-    nom = (p.get("nom") or "Patient importé").strip()
-    slug = slugify(nom) + "_" + datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    dob = p.get("dob", "")
-    if dob:
-        dob_court, age = age_from_dob(dob)
-    else:
-        dob_court, age = "—", (p.get("age") or "—")
-    pt = {"slug": slug, "nom": nom, "dob": dob, "dob_court": dob_court, "age": age,
-          "sexe": p.get("sexe", "non précisé"), "auteur": session["user"],
-          "date_creation": datetime.datetime.now().isoformat(timespec="seconds"), "statut": "bilan", "records": []}
-    os.makedirs(pdir(slug), exist_ok=True); save_patient(slug, pt)
-    rid = create_empty_record(slug, "Bilan initial")
-    r = load_rec(slug, rid)
-    apply_word_to_record(r, res)
-    save_rec(slug, rid, r)
-    try:
-        _regenerate(slug, rid, pt, r, skip_stl=True)
-    except Exception:
-        pass
+    slug, rid, nom = _create_patient_from_word(WORD_STAGE)
     try: os.remove(WORD_STAGE)
     except Exception: pass
     flash("Bilan Word importé — vérifie/complète, puis ajoute les photos, radios et STL via « Import intelligent ».")
