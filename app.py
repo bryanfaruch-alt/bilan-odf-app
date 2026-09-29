@@ -4,14 +4,25 @@ Bilan ODF — application locale de gestion des bilans orthodontiques.
 Login + bibliothèque + génération + suivi dans le temps (réévaluations). 100% local.
 Lancer :  python3 app.py   puis http://127.0.0.1:5000
 """
-import os, json, re, datetime, secrets, unicodedata, traceback, shutil, subprocess, sys
+import os, json, re, datetime, secrets, unicodedata, traceback, shutil, subprocess, sys, importlib
 from flask import (Flask, request, redirect, url_for, session, send_file,
                    render_template_string, flash, abort, jsonify)
 from werkzeug.security import generate_password_hash, check_password_hash
-import pipeline as P
-import word_import as WI
-import backup as BK
-import mass_import as MI
+
+# Chargement DIFFÉRÉ (lazy) des modules lourds : pipeline (VTK/trimesh 3D),
+# word_import & mass_import (python-docx), backup (reportlab...). Ils ne sont
+# importés qu'au 1er usage réel (rendu 3D, génération PDF/Word, import) et PLUS
+# au lancement -> l'application démarre beaucoup plus vite.
+class _Lazy:
+    def __init__(self, name): self.__dict__["_n"] = name; self.__dict__["_m"] = None
+    def __getattr__(self, k):
+        if self.__dict__["_m"] is None:
+            self.__dict__["_m"] = importlib.import_module(self.__dict__["_n"])
+        return getattr(self.__dict__["_m"], k)
+P = _Lazy("pipeline")
+WI = _Lazy("word_import")
+BK = _Lazy("backup")
+MI = _Lazy("mass_import")
 
 # Répertoire des ressources : dossier du script, ou dossier temporaire du bundle
 # PyInstaller (_MEIPASS) quand l'app est « gelée » en exécutable autonome.
@@ -19,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "2.3"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "2.4"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2451,57 +2462,114 @@ def export_patient(slug):
     flash("Patient exporté dans Téléchargements : %s — fichier Bilan ODF réimportable à l'identique." % os.path.basename(out))
     return redirect(url_for("patient", slug=slug))
 
+def _import_transfert_zip(z, names):
+    """Reconstruit un patient depuis un ZIP « Transfert de dossier » (dossiers
+    Photos/Radios/Modeles_STL/Rendus_3D/Traces_WebCeph par temps). Placement par nom
+    de fichier + réutilisation des rendus 3D déjà calculés -> instantané, sans re-détection
+    ni re-rendu. Renvoie le nouveau slug, ou None si le ZIP n'est pas un dossier de transfert."""
+    import collections
+    SUBMAP = {"Photos": "02_photos_traitees", "Photos_brutes": "01_photos_brutes",
+              "Radios": "03_radios", "Modeles_STL": "04_stl_bruts",
+              "Rendus_3D": "05_stl_rendus", "Traces_WebCeph": "06_webceph"}
+    tps = collections.OrderedDict(); nom = ""
+    for n in names:
+        if n.endswith("/"): continue
+        parts = n.split("/")
+        if ".." in parts: continue
+        if parts and parts[0].startswith("Dossier ODF - ") and not nom:
+            nom = parts[0][len("Dossier ODF - "):].strip()
+        if len(parts) >= 3 and parts[-2] in SUBMAP:
+            tps.setdefault(parts[-3], []).append((parts[-2], parts[-1], n))
+    if not tps:
+        return None
+    nom = nom or "Patient importé (transfert)"
+    newslug = slugify(nom) + "_" + datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+    reeval = len(tps) > 1
+    pt = {"slug": newslug, "nom": nom, "dob": "", "dob_court": "", "age": "",
+          "sexe": "non précisé", "auteur": session.get("user", ""),
+          "date_creation": datetime.datetime.now().isoformat(timespec="seconds"),
+          "statut": "en_cours" if reeval else "bilan", "records": []}
+    os.makedirs(pdir(newslug), exist_ok=True); save_patient(newslug, pt)
+    for i, (tpfolder, items) in enumerate(sorted(tps.items())):
+        label = re.sub(r"^\s*\d+\s*-\s*", "", tpfolder).replace("_", " ").strip() or (
+            "Bilan initial" if i == 0 else "Réévaluation %d" % i)
+        rid = create_empty_record(newslug, label)
+        base = rdir(newslug, rid)
+        for sub_label, fname, arc in items:
+            sub = SUBMAP.get(sub_label)
+            if not sub: continue
+            dst = os.path.join(base, sub, os.path.basename(fname))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            with z.open(arc) as sf, open(dst, "wb") as of:
+                shutil.copyfileobj(sf, of)
+        r = load_rec(newslug, rid)
+        if r:
+            r["status"] = "done"; r["photos_verified"] = True
+            r["import_note"] = "Importé depuis un dossier de transfert"
+            save_rec(newslug, rid, r)
+    return newslug
+
 @app.route("/import_patient", methods=["GET", "POST"])
 def import_patient():
     if not logged(): return redirect(url_for("login"))
     if request.method == "POST":
         f = request.files.get("file")
         if not f or not (f.filename or "").lower().endswith(".zip"):
-            flash("Choisis un fichier .zip exporté depuis Bilan ODF."); return redirect(url_for("import_patient"))
+            flash("Choisis un fichier .zip (export patient ou dossier de transfert Bilan ODF)."); return redirect(url_for("import_patient"))
         import zipfile, tempfile
-        tmp = tempfile.mkdtemp()
+        tmp = tempfile.mkdtemp(); mode = None; newslug = None
         try:
             zpath = os.path.join(tmp, "in.zip"); f.save(zpath)
             with zipfile.ZipFile(zpath) as z:
                 names = z.namelist()
-                if "_bilanodf_export.json" not in names or "patient/patient.json" not in names:
-                    shutil.rmtree(tmp, ignore_errors=True)
-                    flash("Ce .zip n'est pas un export patient Bilan ODF (utilise « Exporter le patient »)."); return redirect(url_for("import_patient"))
-                man = json.loads(z.read("_bilanodf_export.json").decode("utf-8"))
-                nom = (man.get("nom", "") or "Patient importé")
-                newslug = slugify(nom) + "_" + datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
-                dest = pdir(newslug); os.makedirs(dest, exist_ok=True)
-                for n in names:
-                    if not n.startswith("patient/"): continue
-                    rel = n[len("patient/"):]
-                    if (not rel) or rel.endswith("/") or ".." in rel or rel.startswith("/"):
-                        continue
-                    tp = os.path.join(dest, rel)
-                    os.makedirs(os.path.dirname(tp) or dest, exist_ok=True)
-                    with z.open(n) as sf, open(tp, "wb") as of:
-                        shutil.copyfileobj(sf, of)
-                pj = os.path.join(dest, "patient.json")
-                d = json.load(open(pj, encoding="utf-8"))
-                d["slug"] = newslug
-                if not d.get("nom"): d["nom"] = nom
-                json.dump(d, open(pj, "w"), ensure_ascii=False, indent=1)
+                if "_bilanodf_export.json" in names and "patient/patient.json" in names:
+                    # (1) Export patient Bilan ODF -> restauration A L'IDENTIQUE
+                    man = json.loads(z.read("_bilanodf_export.json").decode("utf-8"))
+                    nom = (man.get("nom", "") or "Patient importé")
+                    newslug = slugify(nom) + "_" + datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+                    dest = pdir(newslug); os.makedirs(dest, exist_ok=True)
+                    for n in names:
+                        if not n.startswith("patient/"): continue
+                        rel = n[len("patient/"):]
+                        if (not rel) or rel.endswith("/") or ".." in rel or rel.startswith("/"): continue
+                        tp = os.path.join(dest, rel)
+                        os.makedirs(os.path.dirname(tp) or dest, exist_ok=True)
+                        with z.open(n) as sf, open(tp, "wb") as of:
+                            shutil.copyfileobj(sf, of)
+                    pj = os.path.join(dest, "patient.json")
+                    d = json.load(open(pj, encoding="utf-8")); d["slug"] = newslug
+                    if not d.get("nom"): d["nom"] = nom
+                    json.dump(d, open(pj, "w"), ensure_ascii=False, indent=1)
+                    mode = "identique"
+                else:
+                    # (2) Dossier de transfert -> reconstruction rapide (placement par nom)
+                    newslug = _import_transfert_zip(z, names)
+                    mode = "transfert" if newslug else None
         except Exception as e:
             shutil.rmtree(tmp, ignore_errors=True)
             flash("Import impossible : %s" % e); return redirect(url_for("import_patient"))
         shutil.rmtree(tmp, ignore_errors=True)
-        flash("Patient importé à l'identique (aucune régénération nécessaire).")
+        if not newslug:
+            flash("Ce .zip n'est ni un export patient, ni un dossier de transfert Bilan ODF."); return redirect(url_for("import_patient"))
+        if mode == "identique":
+            flash("Patient importé à l'identique (aucune régénération nécessaire).")
+        else:
+            flash("Dossier de transfert importé : photos, radios et modèles 3D placés instantanément. Les valeurs Steiner / synthèse ne font pas partie d'un transfert — à compléter si besoin.")
         return redirect(url_for("suivi", slug=newslug))
     body = ('<p class=muted><a href="%s">← Bibliothèque</a></p><h1>Importer un patient</h1>'
-            '<div class=flash style="background:var(--accw);border-color:var(--line)">Dépose ici un fichier '
-            '<b>« Patient BilanODF - ….zip »</b> exporté depuis une autre installation Bilan ODF. '
-            'Le dossier est restauré <b>à l\'identique</b> (Steiner, synthèse, plan, photos classées, rendus 3D) — '
-            '<b>instantané</b>, sans régénération ni écran de vérification.</div>'
+            '<div class=flash style="background:var(--accw);border-color:var(--line)">Dépose ici un fichier <b>.zip</b> — '
+            'l\'app reconnaît automatiquement le type&nbsp;:<br>'
+            '&bull; <b>« Patient BilanODF - ….zip »</b> (via « Exporter le patient ») → restauré <b>à l\'identique</b> '
+            '(Steiner, synthèse, plan, photos classées, rendus 3D).<br>'
+            '&bull; <b>« Dossier ODF - ….zip »</b> (via « Transfert de dossier ») → photos, radios et 3D placés '
+            '(les valeurs Steiner / synthèse n\'y sont pas incluses).<br>'
+            'Dans les deux cas&nbsp;: <b>instantané</b>, sans régénération ni écran de vérification.</div>'
             '<div class=card><form method=post enctype=multipart/form-data '
             'onsubmit="this.querySelector(\'button\').innerHTML=\'<span class=spin></span> Import…\'">%s'
-            '<div style="margin-top:14px"><button class=btn type=submit>Importer le patient</button></div></form></div>'
-            '<p class=muted style="font-size:13px">Pour créer ce fichier : ouvre le patient chez l\'autre interne, '
-            'puis « <b>Exporter le patient</b> ».</p>') % (
-        url_for("dashboard"), filedrop("file", accept=".zip", multiple=False, label="Glissez le fichier .zip du patient ici, ou cliquez"))
+            '<div style="margin-top:14px"><button class=btn type=submit>Importer</button></div></form></div>'
+            '<p class=muted style="font-size:13px">Pour un transfert <b>parfaitement identique</b>, préfère '
+            '« <b>Exporter le patient</b> » (chez l\'autre interne) plutôt que « Transfert de dossier ».</p>') % (
+        url_for("dashboard"), filedrop("file", accept=".zip", multiple=False, label="Glissez le fichier .zip ici, ou cliquez"))
     return page(body, title="Importer un patient")
 
 # ======================================================================
