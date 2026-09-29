@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "2.5"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "2.6"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2415,6 +2415,12 @@ def transfert_dossier(slug):
                         fp = os.path.join(sd, f)
                         if os.path.isfile(fp):
                             z.write(fp, arcname="%s/%s/%s/%s" % (root, folder, label, f))
+                # Données cliniques du temps (motif, Steiner, synthèse, objectifs/moyens, examen…)
+                # -> réimportées telles quelles par « Importer un patient ».
+                clin = {k: r.get(k) for k in ("label", "date", "motif", "steiner", "synthese",
+                        "exam", "angle", "plan", "crops", "rotations") if r.get(k) is not None}
+                z.writestr("%s/%s/_bilan.json" % (root, folder),
+                           json.dumps(clin, ensure_ascii=False, indent=1))
     except Exception as e:
         shutil.rmtree(_tmp, ignore_errors=True)
         flash("Erreur lors de la creation du dossier : %s" % e)
@@ -2471,15 +2477,19 @@ def _import_transfert_zip(z, names):
     SUBMAP = {"Photos": "02_photos_traitees", "Photos_brutes": "01_photos_brutes",
               "Radios": "03_radios", "Modeles_STL": "04_stl_bruts",
               "Rendus_3D": "05_stl_rendus", "Traces_WebCeph": "06_webceph"}
-    tps = collections.OrderedDict(); nom = ""
+    tps = collections.OrderedDict(); clin_by_tp = {}; nom = ""
     for n in names:
         if n.endswith("/"): continue
         parts = n.split("/")
         if ".." in parts: continue
         if parts and parts[0].startswith("Dossier ODF - ") and not nom:
             nom = parts[0][len("Dossier ODF - "):].strip()
-        if len(parts) >= 3 and parts[-2] in SUBMAP:
+        if parts[-1] == "_bilan.json" and len(parts) >= 2:
+            clin_by_tp[parts[-2]] = n                      # données cliniques du temps
+        elif len(parts) >= 3 and parts[-2] in SUBMAP:
             tps.setdefault(parts[-3], []).append((parts[-2], parts[-1], n))
+    for tp in clin_by_tp:                                  # temps sans images mais avec données
+        tps.setdefault(tp, [])
     if not tps:
         return None
     nom = nom or "Patient importé (transfert)"
@@ -2504,6 +2514,16 @@ def _import_transfert_zip(z, names):
                 shutil.copyfileobj(sf, of)
         r = load_rec(newslug, rid)
         if r:
+            # Réinjecte les données cliniques du temps (motif, Steiner, synthèse, objectifs/moyens, examen…)
+            arc = clin_by_tp.get(tpfolder)
+            if arc:
+                try:
+                    clin = json.loads(z.read(arc).decode("utf-8"))
+                    for k in ("label", "date", "motif", "steiner", "synthese", "exam", "angle", "plan", "crops", "rotations"):
+                        if clin.get(k) is not None:
+                            r[k] = clin[k]
+                except Exception:
+                    pass
             r["status"] = "done"; r["photos_verified"] = True
             r["import_note"] = "Importé depuis un dossier de transfert"
             save_rec(newslug, rid, r)
@@ -2567,15 +2587,15 @@ def import_patient():
         if mode == "identique":
             flash("Patient importé à l'identique (aucune régénération nécessaire).")
         else:
-            flash("Dossier importé : photos, radios et modèles 3D placés instantanément. Les valeurs Steiner / synthèse ne font pas partie d'un transfert — à compléter si besoin.")
+            flash("Dossier importé instantanément : photos, radios, modèles 3D, et — si présents dans le transfert — motif, Steiner, synthèse et objectifs/moyens.")
         return redirect(url_for("suivi", slug=newslug))
     body = ('<p class=muted><a href="%s">← Bibliothèque</a></p><h1>Importer un patient</h1>'
             '<div class=flash style="background:var(--accw);border-color:var(--line)">Dépose ici un fichier <b>.zip</b> — '
             'l\'app reconnaît automatiquement le type&nbsp;:<br>'
             '&bull; <b>« Patient BilanODF - ….zip »</b> (via « Exporter le patient ») → restauré <b>à l\'identique</b> '
             '(Steiner, synthèse, plan, photos classées, rendus 3D).<br>'
-            '&bull; <b>« Dossier ODF - ….zip »</b> (via « Transfert de dossier ») → photos, radios et 3D placés '
-            '(les valeurs Steiner / synthèse n\'y sont pas incluses).<br>'
+            '&bull; <b>« Dossier ODF - ….zip »</b> (via « Transfert de dossier ») → photos, radios, 3D '
+            '<b>et</b> motif, Steiner, synthèse, objectifs/moyens.<br>'
             'Dans les deux cas&nbsp;: <b>instantané</b>, sans régénération ni écran de vérification.</div>'
             '<div class=card><form method=post enctype=multipart/form-data '
             'onsubmit="this.querySelector(\'button.btn\').innerHTML=\'<span class=spin></span> Import…\'">%s'
