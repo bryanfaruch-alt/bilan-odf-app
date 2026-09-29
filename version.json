@@ -1,7 +1,7 @@
 {
- "version": "2.5",
- "notes": "Import plus pratique : cliquer sur la zone ouvre le SELECTEUR macOS natif -> tu navigues partout (Bureau, Telechargements...) meme si l'app n'a pas d'acces disque (fini le 'dossier introuvable'). Tu peux aussi GLISSER le .zip depuis le Bureau, ou CHOISIR UN DOSSIER deja decompresse. Le .zip comme le dossier sont reconstruits instantanement.",
- "ref": "c2a1427fa982073a0af09b56580f5a027d1ac6d9",
+ "version": "2.6",
+ "notes": "Le \"Transfert de dossier\" inclut desormais les donnees cliniques de chaque temps (motif de consultation, analyse de Steiner, synthese diagnostique, objectifs et moyens, examen, date reelle). A l'import via \"Importer un patient\", tout est remis en place automatiquement. (Les anciens transferts crees avant cette version ne les contiennent pas : re-exporter le dossier pour en profiter.)",
+ "ref": "737b83ed1cf7f995cf82541b65f995ba57c88da0",
  "files": [
   "app.py",
   "run_native.py",
