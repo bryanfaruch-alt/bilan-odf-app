@@ -1,7 +1,7 @@
 {
- "version": "2.7",
- "notes": "Import d'un bilan Word ameliore : selecteur natif macOS (tu navigues partout, Bureau compris), tu peux GLISSER les .docx ou choisir \"Des documents\" (fichiers) ou \"Un dossier\". Bonus : importe PLUSIEURS bilans .docx d'un coup (un patient cree par fichier).",
- "ref": "8fdf24fdc1ff2024b09be0e0b4d83eecd78ada9a",
+ "version": "2.8",
+ "notes": "Version de test de la mise a jour automatique. Si tu vois ce message et que le numero en bas a gauche passe a 2.8 apres redemarrage : la mise a jour fonctionne !",
+ "ref": "17277abda4cc6835b4f827967c0c30e0b238d99e",
  "files": [
   "app.py",
   "run_native.py",
