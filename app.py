@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "2.9"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.0"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -3070,13 +3070,25 @@ def staff_page(slug):
                 '<button type=submit class=mi style="color:#C0392B;width:100%%;text-align:left;background:none;border:none;cursor:pointer;padding:8px 6px">&#128465; Supprimer</button></form>'
                 '</div></details>') % (efrm, url_for("staff_delete", slug=slug, sid=sid))
         evo_txt = (" &middot; evolution (%d temps)" % nevo) if nevo else ""
+        # Décision (et questions) affichées sous le staff
+        _ans = (e.get("answers", "") or "").strip()
+        _q = (e.get("questions", "") or "").strip()
+        _dec = ""
+        if _q:
+            _dec += ('<div style="margin-top:12px"><div class=muted style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Questions posées</div>'
+                     '<div style="white-space:pre-line;font-size:14px;margin-top:3px">%s</div></div>') % _hesc(_q)
+        if _ans:
+            _dec += ('<div style="margin-top:12px;background:var(--card2);border:1px solid var(--line);border-left:3px solid var(--ok);'
+                     'border-radius:10px;padding:10px 13px">'
+                     '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ok);font-weight:800">&#9989; Décision du staff</div>'
+                     '<div style="white-space:pre-line;font-size:14.5px;margin-top:3px">%s</div></div>') % _hesc(_ans)
         cards += ('<div class=card><div style="display:flex;justify-content:space-between;align-items:center;gap:12px">'
                   '<a href="%s" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:12px">'
                   '<span style="width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,#16324f,#2f5ca8);color:#fff;'
                   'display:flex;align-items:center;justify-content:center;font-size:20px">&#9654;</span>'
                   '<span><span style="font-weight:800;font-size:16px">Staff du %s</span><br>'
                   '<span class=muted style="font-size:13px">%d temps &middot; %d question(s)%s &mdash; cliquer pour ouvrir</span></span></a>'
-                  '%s</div></div>') % (show, d, ntemps, nq, evo_txt, edit)
+                  '%s</div>%s</div>') % (show, d, ntemps, nq, evo_txt, edit, _dec)
     if not entries:
         cards = '<div class=card center muted>Aucun staff. Crée un staff : choisis les temps à montrer et tes questions.</div>'
     today = datetime.date.today().isoformat()
@@ -3211,7 +3223,7 @@ def staff_export_suivi(slug, sid):
     dd = _date_fr(e.get("date", "")) or (e.get("date", "") or "")[:10]
     body = ("D\xe9cision de staff" + ((" du %s" % dd) if dd else "") + "\n" + txt)
     nt = {"id": datetime.datetime.now().strftime("%Y%m%d%H%M%S") + secrets.token_hex(2),
-          "date": datetime.date.today().isoformat(), "text": body}
+          "date": datetime.date.today().isoformat(), "text": body, "kind": "staff"}
     pt.setdefault("notes", []).append(nt)
     save_patient(slug, pt)
     return ("ok", 200)
@@ -3829,9 +3841,11 @@ def _place_word_photos(base, docx_path):
                     _I.open(src).convert("RGB").save(os.path.join(cap, "capture_%02d.jpg" % i), quality=90)
                     counts["captures"] += 1
                 except Exception: pass
-        # galerie = toutes les photos cliniques (visages + intra-orales) pour corriger au besoin
-        clin = [photos[v] for v in photos]
-        _to_gallery(base, clin)
+        # GALERIE = TOUTES les images extraites (hors radios/rendus), classées ou non,
+        # pour que rien ne soit perdu : une photo mal classée reste rattrapable en un glisser.
+        _rad_set = set(radios); _ren_set = set(renders)
+        gallery_imgs = [p for p in imgs if p not in _rad_set and p not in _ren_set]
+        _to_gallery(base, gallery_imgs)
         return True, counts
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -4216,12 +4230,20 @@ def _ordered_notes(pt):
     idx.sort(key=lambda t: ((t[1].get("date", "") or ""), t[0]), reverse=True)
     return [n for _i, n in idx]
 
+def _is_staff_note(nt):
+    """Vrai si la note est une décision de staff (ne doit pas peser sur l'« état actuel »)."""
+    return (nt.get("kind") == "staff") or ((nt.get("text", "") or "").lstrip().startswith("Décision de staff"))
+
+def _clinical_notes(pt):
+    """Commentaires de suivi hors décisions de staff — base de l'« état actuel »."""
+    return [n for n in _ordered_notes(pt) if not _is_staff_note(n)]
+
 def deduce_etat(pt):
     """Pour chaque champ, valeur du commentaire le plus récent qui le mentionne.
     Appareil : explicite si mentionné ; sinon « Multi-attache » dès qu'un arc est présent."""
     state = {}
     elas_done = False
-    for nt in _ordered_notes(pt):
+    for nt in _clinical_notes(pt):
         ps = parse_note_state(nt.get("text", ""))
         for k, _lbl in ETAT_ORDER:
             if k == "elastiques":
@@ -4305,7 +4327,7 @@ def deduce_accessories(pt):
     """Accessoires actuellement en place : le dernier commentaire qui mentionne un
     accessoire décide (posé -> affiché ; retiré -> non affiché)."""
     acc = {}; seen = set()
-    for nt in _ordered_notes(pt):
+    for nt in _clinical_notes(pt):
         for key, info in parse_note_accessories(nt.get("text", "")).items():
             if key in seen:
                 continue
