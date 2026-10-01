@@ -1,7 +1,7 @@
 {
  "version": "3.1",
  "notes": "Import Word : toutes les photos sont classees et les radios (pano/teleradio) detectees. Nouveau : reassigner une image de la galerie en radio, recherche dans la galerie, prise en charge des radios EMF.",
- "ref": "",
+ "ref": "b1d357535b0ae713294e9112057c34c255820722",
  "files": [
   "app.py",
   "run_native.py",
