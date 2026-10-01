@@ -1,7 +1,7 @@
 {
- "version": "3.0",
- "notes": "Staff : la decision apparait maintenant SOUS chaque staff (onglet Staff), et les decisions de staff ne faussent plus l'Etat actuel du traitement. Import Word : toutes les photos extraites sont desormais mises dans la galerie (meme mal classees), donc plus aucune photo perdue - tu rattrapes en un glisser.",
- "ref": "d0cda1d15d79df84a32721e875ced44c2411be14",
+ "version": "3.1",
+ "notes": "Import Word : toutes les photos sont classees et les radios (pano/teleradio) detectees. Nouveau : reassigner une image de la galerie en radio, recherche dans la galerie, prise en charge des radios EMF.",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",

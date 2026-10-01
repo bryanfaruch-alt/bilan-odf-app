@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.0"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.1"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -3656,6 +3656,34 @@ def _get_view_centroids():
     _VIEW_CEN = (cent, mu, sd)
     return _VIEW_CEN
 
+def _is_radio_feat(x):
+    """Radio = niveaux de gris (quasi pas de muqueuse, peu de couleur). Seuils élargis pour
+    ne jamais rater une pano/téléradio avec une réglette ou une légère teinte sépia."""
+    return x["muc"] < 0.10 and x["grayfrac"] < 0.20
+
+def _split_faces_intra(nonrad):
+    """Sépare visages / intra-oraux par ÉCART relatif de muqueuse (robuste à la couleur de peau
+    et à l'orientation) : les visages ont nettement MOINS de muqueuse que les intra-oraux. On
+    cherche la plus grande rupture parmi les 3 premières photos (≤3 visages par bilan). Repli
+    sur un seuil absolu si aucune rupture nette. Renvoie (faces, intra) — mêmes dicts en entrée."""
+    if not nonrad:
+        return [], []
+    order = sorted(nonrad, key=lambda x: x["muc"])
+    mucs = [x["muc"] for x in order]
+    best_k, best_gap = 0, 0.0
+    for k in (1, 2, 3):
+        if k < len(order):
+            gap = mucs[k] - mucs[k - 1]
+            if gap > best_gap:
+                best_gap, best_k = gap, k
+    if best_k and best_gap >= 0.12 and mucs[best_k - 1] < 0.52:
+        faces = order[:best_k]
+    else:
+        faces = [x for x in order if x["muc"] < 0.30][:3]
+    fset = set(id(x) for x in faces)
+    intra = [x for x in nonrad if id(x) not in fset]
+    return faces, intra
+
 def _classify_learned(paths, cen):
     """Classe via les centroïdes appris + affectation 1-à-1, puis réordonne les visages par règle.
     Renvoie (photos{vue:chemin}, radios[], renders[]) ou None si non applicable."""
@@ -3664,22 +3692,24 @@ def _classify_learned(paths, cen):
     views = [k for k, _ in PHOTO_FIELDS]; vidx = {v: i for i, v in enumerate(views)}
     RE, SO, PR = vidx["exo_face_repos"], vidx["exo_face_sourire"], vidx["exo_profil"]
     aux = {p: _clin_feats(p) for p in paths}
-    radios = [p for p in paths if aux[p]["muc"] < 0.05 and aux[p]["grayfrac"] < 0.12]
+    radios = [p for p in paths if _is_radio_feat(aux[p])]
     clin = [p for p in paths if p not in radios]
     if not clin: return None
     vecs = {p: (_view_feat(p) - mu) / sd for p in clin}
     D = {(p, c): float(_np.linalg.norm(vecs[p] - cent[c])) for p in clin for c in range(8)}
-    # Barriere anti-confusion visage/intra-oral, robuste a la couleur de peau :
-    # une photo SANS muqueuse (muc faible) est un visage -> seulement les 3 cases visage ;
-    # une photo AVEC muqueuse est intra-orale -> seulement les 5 cases intra-orales.
+    # Barriere anti-confusion visage/intra-oral, robuste a la couleur de peau : split relatif
+    # (ecart de muqueuse) au lieu d'un seuil absolu qui ratait les peaux/levres rougeaudes.
     FACE_SLOTS = {RE, SO, PR}; INTRA_SLOTS = set(range(8)) - FACE_SLOTS
+    _clinfeats = [dict(aux[p], __path=p) for p in clin]
+    _facesf, _intraf = _split_faces_intra(_clinfeats)
+    face_cands = [x["__path"] for x in _facesf]
+    intra_cands = [x["__path"] for x in _intraf]
+    face_set = set(face_cands)
     def _allowed(p):
-        return FACE_SLOTS if aux[p]["muc"] < 0.25 else INTRA_SLOTS
+        return FACE_SLOTS if p in face_set else INTRA_SLOTS
     def _best(p):
         al = [c for c in _allowed(p)]
         return min(D[(p, c)] for c in al) if al else 1e9
-    face_cands = [p for p in clin if aux[p]["muc"] < 0.25]
-    intra_cands = [p for p in clin if aux[p]["muc"] >= 0.25]
     used = set(); pred = {}
     # INTRA-ORAL : affectation apprise 1-a-1 (les distinctions fines profitent des exemples).
     for p in sorted(intra_cands, key=lambda p: min(D[(p, c)] for c in INTRA_SLOTS)):
@@ -3712,19 +3742,13 @@ def _classify_photo_set(paths):
             pass
     F = [_clin_feats(p) for p in paths]
     # RADIOS = quasi pas de muqueuse et peu coloré (niveaux de gris).
-    radios = [x for x in F if x["muc"] < 0.05 and x["grayfrac"] < 0.12]
+    radios = [x for x in F if _is_radio_feat(x)]
     nonrad = [x for x in F if x not in radios]
-    # VISAGES = pas de muqueuse au CENTRE (les occlusales montrent le palais/gencive au centre)
-    # ET présence de peau. INDÉPENDANT de l'orientation (portrait ou paysage) : c'est ce qui
-    # faisait échouer le classement quand toutes les photos étaient en paysage.
-    # VISAGE = aucune muqueuse au centre (les occlusales montrent le palais/gencive au centre).
-    # On NE filtre PAS sur la peau (ça rejetait à tort des visages peu lumineux / peau foncée).
-    # VISAGE = photo quasiment sans muqueuse (muc faible). Separateur robuste a la couleur de
-    # peau : l'ancien filtre exigeait cmuc<0.15, ce qui rejetait les visages dont les levres
-    # (au centre) sont vues comme muqueuse -> patients a peau foncee mal classes.
-    face_cand = [x for x in nonrad if x["muc"] < 0.25]
-    intra = [x for x in nonrad if x["muc"] >= 0.25]
-    faces = sorted(face_cand, key=lambda x: x["muc"])[:3]   # les 3 avec le moins de muqueuse
+    # VISAGES vs INTRA-ORAL : split par ÉCART relatif de muqueuse (robuste à la couleur de peau
+    # et à l'orientation). L'ancien seuil absolu muc<0.25 ratait les visages à peau/lèvres
+    # rougeaudes (muc 0.3–0.45) -> ils tombaient dans les cases intra-orales et des photos
+    # manquaient. Le split relatif trouve la vraie rupture entre visages et intra-oraux.
+    face_cand, intra = _split_faces_intra(nonrad)
     renders = []
     photos = {}
     rs = sorted(radios, key=lambda x: x["aspect"])
@@ -3814,6 +3838,116 @@ def _render_slot(base, slot, c):
     except Exception:
         return False
 
+def _emf_carve_raster(data):
+    """Extrait un raster PNG/JPEG embarqué dans un EMF/WMF (cas fréquent des photos
+    collées depuis l'appareil). Renvoie (bytes, extension) ou (None, None)."""
+    for sig, end, ext in ((b"\x89PNG\r\n\x1a\n", b"IEND\xaeB`\x82", "png"),):
+        i = data.find(sig)
+        if i >= 0:
+            j = data.find(end, i)
+            if j >= 0:
+                return data[i:j + len(end)], ext
+    # JPEG : de SOI (FFD8) à EOI (FFD9)
+    i = data.find(b"\xff\xd8\xff")
+    if i >= 0:
+        j = data.find(b"\xff\xd9", i)
+        if j >= 0:
+            return data[i:j + 2], "jpg"
+    return None, None
+
+def _emf_dib_to_bmp(data):
+    """Reconstruit un BMP depuis le 1er enregistrement DIB d'un EMF (STRETCHDIBITS /
+    SETDIBITSTODEVICE / STRETCHBLT / BITBLT) — couvre les radios exportées en EMF."""
+    import struct
+    if len(data) < 88 or data[40:44] != b" EMF":
+        return None
+    DIB_TYPES = {76: (72, 80), 77: (84, 92), 80: (36, 44), 81: (52, 60)}
+    pos = 0; n = len(data)
+    while pos + 8 <= n:
+        try:
+            itype, size = struct.unpack_from("<II", data, pos)
+        except Exception:
+            break
+        if size < 8 or pos + size > n:
+            break
+        if itype in DIB_TYPES:
+            off_bmi_pos, off_bits_pos = DIB_TYPES[itype]
+            try:
+                off_bmi, cb_bmi = struct.unpack_from("<II", data, pos + off_bmi_pos)
+                off_bits, cb_bits = struct.unpack_from("<II", data, pos + off_bits_pos)
+            except Exception:
+                pos += size; continue
+            if cb_bmi and cb_bits and off_bmi and off_bits:
+                bmi = data[pos + off_bmi: pos + off_bmi + cb_bmi]
+                bits = data[pos + off_bits: pos + off_bits + cb_bits]
+                if len(bmi) >= 40 and len(bits) == cb_bits:
+                    off = 14 + cb_bmi
+                    hdr = b"BM" + struct.pack("<IHHI", off + cb_bits, 0, 0, off)
+                    return hdr + bmi + bits
+        pos += size
+    return None
+
+def _convert_vector_images(paths, outdir):
+    """Convertit les images EMF/WMF en PNG (carve raster, puis reconstruction DIB).
+    Renvoie la liste des PNG produits. Les fichiers déjà raster sont renvoyés tels quels."""
+    from PIL import Image as _I
+    import io as _io
+    out = []
+    os.makedirs(outdir, exist_ok=True)
+    for i, p in enumerate(paths):
+        if not p.lower().endswith((".emf", ".wmf")):
+            out.append(p); continue
+        try:
+            with open(p, "rb") as fh: data = fh.read()
+        except Exception:
+            continue
+        dest = os.path.join(outdir, "emf_%02d.png" % i)
+        def _keep(img):
+            # ignore les logos / signatures / icônes (petites images vectorielles)
+            try:
+                w, h = img.size
+                if max(w, h) < 400:
+                    return False
+                img.convert("RGB").save(dest, "PNG"); out.append(dest); return True
+            except Exception:
+                return False
+        done = False
+        raw, ext = _emf_carve_raster(data)
+        if raw:
+            try:
+                if _keep(_I.open(_io.BytesIO(raw))): done = True
+            except Exception: pass
+        if not done:
+            bmp = _emf_dib_to_bmp(data)
+            if bmp:
+                try:
+                    if _keep(_I.open(_io.BytesIO(bmp))): done = True
+                except Exception: pass
+        if not done:
+            # dernier recours : Pillow (Windows uniquement) ou outil externe si présent
+            try:
+                _keep(_I.open(p))
+            except Exception: pass
+    return out
+
+def _extract_vector_media(docx_path, outdir):
+    """Récupère les EMF/WMF de word/media/ (que extract_word_media ignore) et les convertit."""
+    import zipfile
+    vout = os.path.join(outdir, "_vec"); os.makedirs(vout, exist_ok=True)
+    vecs = []
+    try:
+        with zipfile.ZipFile(docx_path) as z:
+            for nm in z.namelist():
+                if nm.lower().startswith("word/media/") and nm.lower().endswith((".emf", ".wmf")):
+                    dst = os.path.join(vout, os.path.basename(nm))
+                    try:
+                        with z.open(nm) as sfh, open(dst, "wb") as d: shutil.copyfileobj(sfh, d)
+                        vecs.append(dst)
+                    except Exception: pass
+    except Exception:
+        return []
+    return _convert_vector_images(vecs, os.path.join(outdir, "_vecpng"))
+
 def _place_word_photos(base, docx_path):
     """Depuis un bilan Word : classe automatiquement les 8 vues (classement relatif, fiable),
     les place TELLES QUELLES (pas de recadrage carré), place les radios, et met toutes les
@@ -3826,7 +3960,13 @@ def _place_word_photos(base, docx_path):
         try:
             imgs = MI.extract_word_media(docx_path, tmp)
         except Exception:
-            return False, counts
+            imgs = []
+        # Récupère aussi les EMF/WMF (radios/photos vectorisées) ignorés par l'extraction standard
+        try:
+            vec = _extract_vector_media(docx_path, tmp)
+            if vec: imgs = list(imgs) + vec
+        except Exception:
+            pass
         if not imgs:
             return False, counts
         photos, radios, renders = _classify_photo_set(imgs)
@@ -5323,13 +5463,23 @@ def record(slug, rid):
                             'onclick="lbShow(\'%s\',\'%s\')" alt="Photo non classée de la séance">') % (f, gth, f, gsrc, f)
     gallery_block = ""
     if gthumbs:
+        _ngal = gthumbs.count("class=galimg")
         gallery_block = ('<div style="margin-top:14px"><div style="font-weight:700;margin-bottom:6px">Galerie — toutes les photos '
                          '<span class=muted style="font-weight:400">(glisse une photo vers une vue ci-dessus, ou clique pour l\'agrandir et l\'assigner)</span></div>'
-                         '<div class=galgrid>%s</div></div>') % gthumbs
+                         '<input id=galsearch type=search placeholder="Filtrer la galerie (nom de fichier)…" '
+                         'oninput="galFilter(this.value)" '
+                         'style="width:100%%;max-width:360px;margin-bottom:8px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px">'
+                         '<span id=galcount class=muted style="margin-left:8px;font-size:12px">%d photos</span>'
+                         '<div class=galgrid id=galgrid>%s</div></div>') % (_ngal, gthumbs)
     # boutons d'assignation de la visionneuse (une vue par bouton)
     lb_buttons = "".join('<button type=button class="btn sec sm" onclick="lbAssign(\'%s\')">%s</button>' % (k, l)
                          for k, l in PHOTO_FIELDS)
+    RADIO_ASSIGN = (("panoramique", "Panoramique"), ("teleradiographie_profil", "Téléradio de profil"),
+                    ("trace_cephalo", "Tracé céphalo."))
+    lb_radio_buttons = "".join('<button type=button class="btn sec sm" style="border-color:#b9c8e6" onclick="lbAssignRadio(\'%s\')">%s</button>' % (k, l)
+                               for k, l in RADIO_ASSIGN)
     assign_action = url_for("assign_photo", slug=slug, rid=rid)
+    assign_radio_action = url_for("assign_radio", slug=slug, rid=rid)
     photos_css = """<style>
     .slotline{display:grid;gap:6px;margin-bottom:6px}
     .slot{border:1px solid var(--line);border-radius:9px;padding:4px;position:relative;min-height:60px;background:#fff}
@@ -5361,13 +5511,23 @@ def record(slug, rid):
       var f=e.dataTransfer.getData('f');if(f)doAssign(el.dataset.view,f);}
     function doAssign(view,file){var fm=document.getElementById('afForm');
       fm.view.value=view;fm.file.value=file;fm.submit();}
+    function lbAssignRadio(typ){if(!_lbFile)return;var fm=document.getElementById('arForm');
+      fm.type.value=typ;fm.file.value=_lbFile;fm.submit();}
+    function galFilter(q){q=(q||'').toLowerCase();var g=document.getElementById('galgrid');
+      if(!g)return;var n=0;g.querySelectorAll('.galimg').forEach(function(im){
+        var f=(im.getAttribute('data-file')||'').toLowerCase();
+        var show=!q||f.indexOf(q)>=0;im.style.display=show?'':'none';if(show)n++;});
+      var c=document.getElementById('galcount');if(c)c.textContent=n+' photo'+(n>1?'s':'');}
     </script>"""
     photos_html = (photos_css + photos_js
                    + '<form id=afForm method=post action="%s"><input type=hidden name=view><input type=hidden name=file></form>' % assign_action
+                   + '<form id=arForm method=post action="%s"><input type=hidden name=type><input type=hidden name=file></form>' % assign_radio_action
                    + slots_html + gallery_block
                    + '<div id=lbov onclick="if(event.target.id==\'lbov\')lbClose()"><a id=lbclose onclick="lbClose()">&times;</a>'
-                     '<img id=lbimg src="" alt="Photo agrandie"><div id=lbassign><div style="color:#cfe0ff;text-align:center;margin-top:12px;font-size:13px">Assigner cette photo à :</div>'
-                     '<div id=lbbtns>' + lb_buttons + '</div></div></div>')
+                     '<img id=lbimg src="" alt="Photo agrandie"><div id=lbassign><div style="color:#cfe0ff;text-align:center;margin-top:12px;font-size:13px">Assigner cette photo à une vue :</div>'
+                     '<div id=lbbtns>' + lb_buttons + '</div>'
+                     '<div style="color:#cfe0ff;text-align:center;margin-top:12px;font-size:13px">…ou marquer comme radio :</div>'
+                     '<div id=lbbtns>' + lb_radio_buttons + '</div></div></div>')
     def img_line(cells):
         cells = [c for c in cells if c]
         if not cells: return ""
@@ -6561,6 +6721,44 @@ def assign_photo(slug, rid):
     r["photos_verified"] = True
     save_rec(slug, rid, r)
     flash("Photo assignée à « %s » (recadrage possible avec l'outil ✂)." % dict(PHOTO_FIELDS).get(view, view))
+    return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
+
+@app.route("/record/<slug>/<rid>/assign_radio", methods=["POST"])
+def assign_radio(slug, rid):
+    """Réassigne une image de la galerie (08_galerie) en radiographie / tracé :
+    panoramique & teleradiographie_profil -> 03_radios/<type>.jpg ; trace_cephalo -> 06_webceph/trace_*.jpg.
+    Utile quand une radio du Word a été rangée par erreur dans la galerie (« Marquer ceci comme radio »)."""
+    if not logged(): return redirect(url_for("login"))
+    from PIL import Image as _I, ImageOps as _IO
+    pt = load_patient(slug); r = load_rec(slug, rid)
+    if not pt or not r: abort(404)
+    typ = request.form.get("type", "").strip()
+    fname = os.path.basename(request.form.get("file", "").strip())
+    if typ not in ("panoramique", "teleradiographie_profil", "trace_cephalo"):
+        flash("Type de radio invalide."); return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
+    base = rdir(slug, rid)
+    src = os.path.join(base, "08_galerie", fname)
+    if not fname or not os.path.exists(src):
+        flash("Réassignation impossible (image introuvable dans la galerie)."); return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
+    if typ == "trace_cephalo":
+        import time as _t
+        os.makedirs(os.path.join(base, "06_webceph"), exist_ok=True)
+        dest = os.path.join(base, "06_webceph", "trace_%d.jpg" % int(_t.time() * 1000))
+    else:
+        os.makedirs(os.path.join(base, "03_radios"), exist_ok=True)
+        dest = os.path.join(base, "03_radios", typ + ".jpg")
+    try:
+        _IO.exif_transpose(_I.open(src)).convert("RGB").save(dest, quality=92)
+    except Exception as e:
+        flash("Image illisible : %s" % e); return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
+    # retire l'image de la galerie (elle est maintenant classée comme radio)
+    try: os.remove(src)
+    except Exception: pass
+    try: _regenerate(slug, rid, pt, r, skip_stl=True)
+    except Exception: pass
+    lbl = {"panoramique": "Panoramique", "teleradiographie_profil": "Téléradiographie de profil",
+           "trace_cephalo": "Tracé céphalométrique"}[typ]
+    flash("Image reclassée en « %s »." % lbl)
     return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
 
 # ======================================================================
