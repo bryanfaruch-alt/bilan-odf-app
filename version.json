@@ -1,7 +1,7 @@
 {
- "version": "2.9",
- "notes": "Correction : depuis la bibliotheque, l'etoile 'a staffer' et l'icone 'a presenter' rebasculent bien au clic (avant, un clic ouvrait le dossier par erreur).",
- "ref": "e281beacf157afa7ec6a733eba29f06619f79ca7",
+ "version": "3.0",
+ "notes": "Staff : la decision apparait maintenant SOUS chaque staff (onglet Staff), et les decisions de staff ne faussent plus l'Etat actuel du traitement. Import Word : toutes les photos extraites sont desormais mises dans la galerie (meme mal classees), donc plus aucune photo perdue - tu rattrapes en un glisser.",
+ "ref": "d0cda1d15d79df84a32721e875ced44c2411be14",
  "files": [
   "app.py",
   "run_native.py",
