@@ -1,7 +1,7 @@
 {
  "version": "3.11",
  "notes": "Import massif: detecte les patients photos-seules/radios-seules + cases a cocher sur la recap. Logo photo >3 mois: juste l'appareil photo rouge, sans le texte.",
- "ref": "",
+ "ref": "bc13a65a8e427a807b0a53b94c835201859c9713",
  "files": [
   "app.py",
   "run_native.py",
