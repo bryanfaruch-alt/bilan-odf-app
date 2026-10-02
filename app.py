@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.6"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.7"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2624,27 +2624,29 @@ def _import_transfert_zip(z, names):
 def import_patient():
     if not logged(): return redirect(url_for("login"))
     if request.method == "POST":
-        import zipfile, io as _io
-        # Accepte un fichier .zip (name=file) OU un dossier décompressé (name=folder, webkitdirectory)
+        import zipfile, io as _io, tempfile
         allf = [x for x in (request.files.getlist("file") + request.files.getlist("folder")) if x and x.filename]
         if not allf:
-            flash("Choisis un fichier .zip ou un dossier (export patient ou dossier de transfert Bilan ODF)."); return redirect(url_for("import_patient"))
-        mode = None; newslug = None
+            flash("Dépose un fichier ZIP Bilan ODF, ou le dossier/Word du patient envoyé par le confrère."); return redirect(url_for("import_patient"))
+        try: rels = json.loads(request.form.get("relpaths", "") or "[]")
+        except Exception: rels = []
+        folder_name = ""; mode = None; newslug = None
         try:
             if len(allf) == 1 and (allf[0].filename or "").lower().endswith(".zip"):
                 zbytes = allf[0].read()
             else:
-                # dossier -> reconstruit un zip en mémoire à partir des chemins relatifs des fichiers
+                # dossier / fichiers -> zip en mémoire ; arborescence reconstruite via relpaths
+                # (WKWebView envoie à plat, donc on se fie aux chemins relatifs du navigateur)
                 mem = _io.BytesIO()
                 with zipfile.ZipFile(mem, "w", zipfile.ZIP_DEFLATED) as zz:
-                    for uf in allf:
-                        rp = (uf.filename or "").replace("\\", "/").lstrip("/")
+                    for i, uf in enumerate(allf):
+                        rp = (rels[i] if i < len(rels) and rels[i] else (uf.filename or "")).replace("\\", "/").lstrip("/")
                         if (not rp) or rp.endswith("/") or ".." in rp.split("/"): continue
+                        if "/" in rp and not folder_name: folder_name = rp.split("/")[0]
                         zz.writestr(rp, uf.read())
                 zbytes = mem.getvalue()
             with zipfile.ZipFile(_io.BytesIO(zbytes)) as z:
                 names = z.namelist()
-                # tolère un dossier de tête (ex. dossier décompressé) : préfixe commun éventuel
                 exp = next((n for n in names if n.endswith("_bilanodf_export.json")), None)
                 prefix = exp[:-len("_bilanodf_export.json")] if exp else ""
                 if exp is not None and (prefix + "patient/patient.json") in names:
@@ -2668,38 +2670,69 @@ def import_patient():
                     json.dump(d, open(pj, "w"), ensure_ascii=False, indent=1)
                     mode = "identique"
                 else:
-                    # (2) Dossier de transfert -> reconstruction rapide (placement par nom)
+                    # (2) Dossier de transfert Bilan ODF -> reconstruction rapide (placement par nom)
                     newslug = _import_transfert_zip(z, names)
                     mode = "transfert" if newslug else None
         except Exception as e:
             flash("Import impossible : %s" % e); return redirect(url_for("import_patient"))
-        if not newslug:
-            flash("Fichier non reconnu : choisis un « Patient BilanODF - ….zip » ou un « Dossier ODF - … » (fichier .zip ou dossier)."); return redirect(url_for("import_patient"))
-        if mode == "identique":
-            flash("Patient importé à l'identique (aucune régénération nécessaire).")
-        else:
-            flash("Dossier importé instantanément : photos, radios, modèles 3D, et — si présents dans le transfert — motif, Steiner, synthèse et objectifs/moyens.")
-        return redirect(url_for("suivi", slug=newslug))
-    body = ('<p class=muted><a href="%s">← Bibliothèque</a></p><h1>Importer un patient</h1>'
-            '<div class=flash style="background:var(--accw);border-color:var(--line)">Dépose ici un fichier <b>.zip</b> — '
-            'l\'app reconnaît automatiquement le type&nbsp;:<br>'
-            '&bull; <b>« Patient BilanODF - ….zip »</b> (via « Exporter le patient ») → restauré <b>à l\'identique</b> '
-            '(Steiner, synthèse, plan, photos classées, rendus 3D).<br>'
-            '&bull; <b>« Dossier ODF - ….zip »</b> (via « Transfert de dossier ») → photos, radios, 3D '
-            '<b>et</b> motif, Steiner, synthèse, objectifs/moyens.<br>'
-            'Dans les deux cas&nbsp;: <b>instantané</b>, sans régénération ni écran de vérification.</div>'
-            '<div class=card><form method=post enctype=multipart/form-data '
-            'onsubmit="this.querySelector(\'button.btn\').innerHTML=\'<span class=spin></span> Import…\'">%s'
-            '<div class=muted style="margin-top:12px;font-size:13px">…ou, si tu as déjà <b>décompressé</b> le dossier&nbsp;: '
-            '<label class="btn sec sm" style="cursor:pointer;display:inline-flex">&#128193; Choisir un dossier'
-            '<input type=file name=folder webkitdirectory directory multiple style="display:none" '
-            'onchange="if(this.files.length){this.form.querySelector(\'button.btn\').innerHTML=\'<span class=spin></span> Import…\';this.form.submit();}"></label></div>'
-            '<div style="margin-top:14px"><button class=btn type=submit>Importer</button></div></form></div>'
-            '<p class=muted style="font-size:13px">Astuce&nbsp;: <b>pas besoin de décompresser</b> — glisse ou choisis directement le fichier <b>.zip</b>. '
-            'Le sélecteur qui s\'ouvre te laisse naviguer partout (Bureau, Téléchargements…), même si l\'app n\'a pas d\'accès disque.<br>'
-            'Pour un transfert <b>parfaitement identique</b>, préfère « <b>Exporter le patient</b> » (chez l\'autre interne) plutôt que « Transfert de dossier ».</p>') % (
-        url_for("dashboard"), filedrop("file", accept=".zip", multiple=False, label="Glissez le fichier .zip ici, ou cliquez pour parcourir"))
-    return page(body, title="Importer un patient")
+        if newslug:
+            flash("Patient importé à l'identique (aucune régénération nécessaire)." if mode == "identique"
+                  else "Dossier importé : photos, radios, modèles 3D, et — si présents — motif, Steiner, synthèse et objectifs/moyens.")
+            return redirect(url_for("suivi", slug=newslug))
+        # (3) Ni export ni dossier de transfert Bilan ODF : dossier/Word BRUT d'un confrère
+        #     -> traité exactement comme un « Nouveau patient » (tri par sous-dossier, classement auto).
+        try:
+            stage = tempfile.mkdtemp(prefix="tr_")
+            with zipfile.ZipFile(_io.BytesIO(zbytes)) as z:
+                for n in z.namelist():
+                    if n.endswith("/") or ".." in n.split("/"): continue
+                    tp = os.path.join(stage, n)
+                    os.makedirs(os.path.dirname(tp) or stage, exist_ok=True)
+                    with z.open(n) as sf, open(tp, "wb") as of:
+                        shutil.copyfileobj(sf, of)
+            slug, rid, summary = _build_new_patient_from_drop(stage, fallback_name=folder_name)
+            shutil.rmtree(stage, ignore_errors=True)
+        except Exception as e:
+            flash("Transfert non reconnu et import impossible : %s" % str(e)[:150]); return redirect(url_for("import_patient"))
+        flash("Patient « %s » importé depuis le transfert — %d photo(s), %d radio(s). Vérifie le classement si besoin." % (
+            summary["nom"], summary["photos"], summary["radios"]))
+        return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
+    # ---- GET : page « Transfert reçu » ----
+    body = ('<h1>Transfert reçu d\'un confrère</h1>'
+      '<div class=flash style="background:var(--accw);border-color:var(--line)">Dépose ce que le confrère t\'a envoyé — '
+      'l\'app reconnaît toute seule&nbsp;:<br>'
+      '&bull; un <b>fichier ZIP Bilan ODF</b> (« Patient BilanODF… » ou « Dossier ODF… ») → restauré <b>à l\'identique</b>, instantané ;<br>'
+      '&bull; un <b>dossier</b> ou un <b>bilan Word</b> (photos, radios, modèles en vrac) → créé et classé automatiquement, comme un nouveau patient.</div>'
+      '<form method=post action="%s" enctype=multipart/form-data id=trform '
+      'onsubmit="var b=document.getElementById(\'trsub\');if(b){b.innerHTML=\'<span class=spin></span> Import en cours… (ne ferme pas)\';}">'
+      '<div class=filedrop id=trdrop>'
+      '<div style="font-size:30px;line-height:1">&#128229;</div>'
+      '<div class=filedrop-t>Glisse ici le <b>ZIP</b>, le <b>dossier</b> ou le <b>Word</b> reçu</div>'
+      '<div class=muted style="font-size:12px;margin:2px 0 8px">…ou choisis&nbsp;:</div>'
+      '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'
+      '<button type=button class="btn sec sm" onclick="document.getElementById(\'tr_file\').click()">&#128230; Un fichier (ZIP ou Word)</button>'
+      '<button type=button class="btn sec sm" onclick="document.getElementById(\'tr_folder\').click()">&#128193; Un dossier</button></div>'
+      '<input id=tr_file type=file name=file style="display:none" onchange="trpick(this)">'
+      '<input id=tr_folder type=file name=folder webkitdirectory directory multiple style="display:none" onchange="trpick(this)">'
+      '<input type=hidden id=tr_relpaths name=relpaths>'
+      '</div>'
+      '<div id=trstatus class=muted style="margin-top:10px;font-weight:600"></div>'
+      '<div style="margin-top:14px"><button class=btn type=submit id=trsub disabled>Importer le transfert</button></div>'
+      '</form>'
+      '<div class=muted style="margin-top:16px;font-size:13.5px">Pour un transfert <b>parfaitement identique</b> '
+      '(Steiner, synthèse, plan, rendus 3D), demande au confrère d\'utiliser « <b>Exporter le patient</b> ».</div>'
+      '<script>'
+      'function trpick(inp){var o=inp.id===\'tr_file\'?document.getElementById(\'tr_folder\'):document.getElementById(\'tr_file\');try{o.value=\'\';}catch(e){}'
+      'var rels=[];for(var i=0;i<inp.files.length;i++){rels.push(inp.files[i].webkitRelativePath||inp.files[i].name);}'
+      'var rp=document.getElementById(\'tr_relpaths\');if(rp)rp.value=JSON.stringify(rels);'
+      'var n=inp.files.length;document.getElementById(\'trstatus\').textContent=n?(n+\' fichier(s) prêt(s) — clique « Importer le transfert »\'):\'\';'
+      'document.getElementById(\'trsub\').disabled=(n===0);}'
+      '(function(){var z=document.getElementById(\'trdrop\'),fi=document.getElementById(\'tr_file\');'
+      '[\'dragenter\',\'dragover\'].forEach(function(e){z.addEventListener(e,function(ev){ev.preventDefault();z.classList.add(\'over\');});});'
+      'z.addEventListener(\'dragleave\',function(ev){if(!z.contains(ev.relatedTarget))z.classList.remove(\'over\');});'
+      'z.addEventListener(\'drop\',function(ev){ev.preventDefault();z.classList.remove(\'over\');if(ev.dataTransfer&&ev.dataTransfer.files&&ev.dataTransfer.files.length){try{fi.files=ev.dataTransfer.files;}catch(_){}trpick(fi);}});})();'
+      '</script>') % url_for("import_patient")
+    return page(body, title="Transfert reçu")
 
 # ======================================================================
 #  DOCUMENTS DU PATIENT (fichiers libres : PDF, Word, radios, photos...)
