@@ -1,7 +1,7 @@
 {
  "version": "3.4",
  "notes": "Nouveau patient simplifie : un seul depot (dossier complet, bilan Word seul, ou dossier au nom du patient sans Word). Cree la fiche + range tout automatiquement (donnees Word, photos, radios, modeles). Le Word seul utilise aussi ses images.",
- "ref": "",
+ "ref": "a14a51a350fa76872708f2bcb79b34c023712c16",
  "files": [
   "app.py",
   "run_native.py",
