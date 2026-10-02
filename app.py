@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.10"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.11"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -1771,11 +1771,12 @@ def dashboard():
                    '<circle cx="12" cy="13" r="3.5"/></svg>')
             if inline:
                 return ('<span title="Photos de plus de 3 mois — à refaire" style="display:inline-flex;'
-                        'align-items:center;color:#e8590c">%s</span>') % (svg % (18, 18))
+                        'align-items:center;color:#e03131">%s</span>') % (svg % (18, 18))
+            # vignette : juste le logo appareil photo en rouge (pas de texte, pas de pastille),
+            # avec une ombre portée pour rester lisible sur la photo.
             return ('<div title="Photos de plus de 3 mois — à refaire" style="position:absolute;top:8px;left:8px;'
-                    'z-index:22;display:inline-flex;align-items:center;gap:4px;background:#e8590c;color:#fff;'
-                    'padding:4px 9px;border-radius:999px;box-shadow:0 2px 6px rgba(0,0,0,.25);font-size:11px;'
-                    'font-weight:800">%s+3 mois</div>') % (svg % (14, 14))
+                    'z-index:22;display:inline-flex;align-items:center;color:#e03131;'
+                    'filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">%s</div>') % (svg % (22, 22))
         _flags = ('<span style="display:inline-flex;gap:9px;align-items:center">%s%s%s</span>'
                   % (_starbtn(), _presbtn(), _cam(inline=True)))
         if vue == "liste":
@@ -2041,21 +2042,26 @@ def nouveau_bulk():
                 elif fl.endswith(".docx") and not f.startswith("~$"): nr += 1
         return ni, nd, nr
     rows = ""
-    for d in pats:
+    for i, d in enumerate(pats):
         ni, nd, nr = _count(d)
-        rows += ('<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px">'
-                 '<b>%s</b><span class=muted style="font-size:12.5px">%d image(s)%s%s</span></div>') % (
-                 os.path.basename(d).replace("<", "&lt;"), ni,
+        rows += ('<label style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 11px;'
+                 'border:1px solid var(--line);border-radius:9px;margin-bottom:6px;cursor:pointer">'
+                 '<span style="display:flex;align-items:center;gap:9px"><input type=checkbox name=pick value="%d" checked> '
+                 '<b>%s</b></span>'
+                 '<span class=muted style="font-size:12.5px">%d image(s)%s%s</span></label>') % (
+                 i, os.path.basename(d).replace("<", "&lt;"), ni,
                  (" · %d modèle(s)" % nd) if nd else "", (" · bilan Word" if nr else ""))
     body = ('<p class=muted><a href="%s">← Annuler</a></p><h1>Import en masse — %d patients détectés</h1>'
-            '<div class=flash style="background:var(--accw);border-color:var(--line)">Chaque sous-dossier devient '
-            '<b>un patient</b> (photos classées aux bonnes vues, radios, modèles). La génération des bilans Word/PDF '
-            'se fera à l\'ouverture de chaque fiche (pour que l\'import reste rapide).</div>'
+            '<div class=flash style="background:var(--accw);border-color:var(--line)">Chaque sous-dossier coché devient '
+            '<b>un patient</b> (photos classées aux bonnes vues, radios, modèles). <b>Décoche</b> une ligne si ce n\'est '
+            'pas un patient. La génération des bilans Word/PDF se fera à l\'ouverture de chaque fiche (pour que l\'import reste rapide).</div>'
+            '<div style="margin:-6px 0 10px;font-size:12.5px"><a href="#" onclick="document.querySelectorAll(\'input[name=pick]\').forEach(function(c){c.checked=true});return false">Tout cocher</a>'
+            ' · <a href="#" onclick="document.querySelectorAll(\'input[name=pick]\').forEach(function(c){c.checked=false});return false">Tout décocher</a></div>'
+            '<form method=post action="%s" style="margin-top:4px" onsubmit="this.querySelector(\'button\').innerHTML=\'<span class=spin></span> Import en cours… (ne ferme pas)\'">'
             '%s'
-            '<form method=post action="%s" style="margin-top:14px" onsubmit="this.querySelector(\'button\').innerHTML=\'<span class=spin></span> Import en cours… (ne ferme pas)\'">'
-            '<button class=btn>Importer les %d patients</button> '
-            '<a class="btn sec" href="%s">Annuler</a></form>') % (
-            url_for("nouveau"), len(pats), rows, url_for("nouveau_bulk_go"), len(pats), url_for("nouveau"))
+            '<div style="margin-top:14px"><button class=btn>Importer les patients cochés</button> '
+            '<a class="btn sec" href="%s">Annuler</a></div></form>') % (
+            url_for("nouveau"), len(pats), url_for("nouveau_bulk_go"), rows, url_for("nouveau"))
     return page(body, title="Import en masse")
 
 @app.route("/nouveau/bulk/go", methods=["POST"])
@@ -2065,8 +2071,12 @@ def nouveau_bulk_go():
     if not stage or not os.path.isdir(stage):
         flash("Lot expiré — recommence le dépôt."); return redirect(url_for("nouveau"))
     pats = _detect_patient_folders(stage)
+    picks = request.form.getlist("pick")
+    sel = set(int(x) for x in picks if x.isdigit()) if picks else None   # None = tout (sécurité)
     ok = 0; errs = []
-    for d in pats:
+    for i, d in enumerate(pats):
+        if sel is not None and i not in sel:
+            continue
         try:
             _build_new_patient_from_drop(d, fallback_name=os.path.basename(d), do_regen=False)
             ok += 1
@@ -7276,21 +7286,25 @@ def _descend_single(root):
     return root
 
 def _is_patient_folder(d):
-    """Un sous-dossier est « un patient » s'il contient un bilan Word, un sous-dossier de type
-    (Photo/Radio/Modèle) ou un modèle .stl — bref la structure d'un dossier patient."""
+    """Un sous-dossier = « un patient » dès qu'il contient de la matière clinique : un bilan Word,
+    un modèle 3D, AU MOINS UNE IMAGE (photo ou radio), ou un sous-dossier de type (Photo/Radio/Modèle).
+    Volontairement permissif : mieux vaut proposer un patient de trop (décochable sur l'écran de récap)
+    que d'en oublier un (un patient qui n'a que des photos en vrac était ignoré avant)."""
     try:
         for e in os.listdir(d):
-            p = os.path.join(d, e)
-            if os.path.isdir(p):
+            if os.path.isdir(os.path.join(d, e)):
                 n = MI._norm(e)
                 if any(k in n for k in (_PHOTO_DIR_KW + _RADIO_DIR_KW + _MODEL_DIR_KW)):
                     return True
     except Exception:
         return False
+    _IMG = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".heic")
     for root, _dd, fs in os.walk(d):
         for f in fs:
+            if f.startswith(".") or f.startswith("~$"):
+                continue
             fl = f.lower()
-            if (fl.endswith(".docx") and not f.startswith("~$")) or fl.endswith((".stl", ".ply", ".obj")):
+            if fl.endswith(".docx") or fl.endswith((".stl", ".ply", ".obj")) or fl.endswith(_IMG):
                 return True
     return False
 
