@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.9"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.10"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -1058,7 +1058,7 @@ html[data-theme=dark] .flash.ok{background:rgba(74,222,128,.12);border-color:rgb
       <div class="lbl">Patient</div>
       <a href="{{url_for('dashboard')}}" class="{{'active' if ep in ('dashboard','suivi','patient','record','evolution','patient_edit') else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> Bibliothèque</a>
       <a href="{{url_for('nouveau')}}" class="{{'active' if ep in ('nouveau','creer') else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Nouveau patient</a>
-      <a href="{{url_for('import_massif')}}" class="{{'active' if ep and ('massif' in ep or ep=='word_import') else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Importer patient / bilan (Word)</a>
+      <a href="{{url_for('import_patient')}}" class="{{'active' if ep and (ep=='import_patient' or 'massif' in ep or ep=='word_import' or ep=='creer_import') else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Transfert reçu</a>
       <a href="{{url_for('appareils_home')}}" class="{{'active' if ep and ep.startswith('appareil') else ''}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8v2a8 8 0 0 0 16 0V8"/><path d="M4 10h16"/><path d="M8 10v2M12 10v3M16 10v2"/></svg> Appareils</a>
       <div class="lbl">Applications tierces</div>
       <a href="#" onclick="return plat('xero')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M4.5 8h15M4.5 16h15"/></svg> XERO</a>

@@ -1,7 +1,7 @@
 {
- "version": "3.9",
- "notes": "Export clarifie en 2 choix : confrere AVEC lapp -> ZIP reimportable a lidentique ; confrere SANS lapp -> dossier lisible (PDF du bilan + photos numerotees et nommees + radios + apercus 3D). Un seul bouton Exporter/transferer sur la fiche.",
- "ref": "b6670907ba5cf57d04f4c1dd99919016a2516aae",
+ "version": "3.10",
+ "notes": "Menu nettoyé : Nouveau patient + Transfert reçu (fin des entrees d'import redondantes)",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",
