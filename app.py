@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.4"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.5"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -1938,6 +1938,7 @@ def nouveau():
       '<button type=button class="btn sec sm" onclick="document.getElementById(\'np_files\').click()">&#128196; Des fichiers (Word, photos…)</button></div>'
       '<input id=np_files type=file name=files multiple style="display:none" onchange="nppick(this)">'
       '<input id=np_folder type=file name=folder webkitdirectory directory multiple style="display:none" onchange="nppick(this)">'
+      '<input type=hidden id=np_foldername name=folder_name>'
       '</div>'
       '<div id=npstatus class=muted style="margin-top:10px;font-weight:600"></div>'
       '<div style="margin-top:10px"><input name=nom placeholder="Nom du patient (utile seulement si ni Word ni dossier nommé)" '
@@ -1949,7 +1950,10 @@ def nouveau():
       ' &nbsp;·&nbsp; Besoin d\'une <a href="%s">fiche vide à remplir à la main</a>.</div>'
       '<script>'
       'function nppick(inp){var o=inp.id===\'np_files\'?document.getElementById(\'np_folder\'):document.getElementById(\'np_files\');try{o.value=\'\';}catch(e){}'
-      'var n=inp.files.length;document.getElementById(\'npstatus\').textContent=n?(n+\' fichier(s) prêt(s) — clique « Créer le patient »\'):\'\';'
+      'var fn=document.getElementById(\'np_foldername\');if(fn){fn.value=\'\';'
+      'if(inp.files.length&&inp.files[0].webkitRelativePath){fn.value=inp.files[0].webkitRelativePath.split(\'/\')[0];}}'
+      'var n=inp.files.length;var nm=(fn&&fn.value)?(\' — dossier « \'+fn.value+\' »\'):\'\';'
+      'document.getElementById(\'npstatus\').textContent=n?(n+\' fichier(s) prêt(s)\'+nm+\' — clique « Créer le patient »\'):\'\';'
       'document.getElementById(\'npsub\').disabled=(n===0);}'
       '(function(){var z=document.getElementById(\'npdrop\'),fi=document.getElementById(\'np_files\');'
       '[\'dragenter\',\'dragover\'].forEach(function(e){z.addEventListener(e,function(ev){ev.preventDefault();z.classList.add(\'over\');});});'
@@ -1987,7 +1991,8 @@ def nouveau_go():
             dst = os.path.join(stage, rp)
             os.makedirs(os.path.dirname(dst) or stage, exist_ok=True)
             uf.save(dst)
-        fallback = (request.form.get("nom", "").strip() or folder_name or "")
+        fallback = (request.form.get("nom", "").strip() or folder_name
+                    or request.form.get("folder_name", "").strip() or "")
         slug, rid, summary = _build_new_patient_from_drop(stage, fallback_name=fallback)
     except Exception as e:
         shutil.rmtree(stage, ignore_errors=True)
@@ -6928,29 +6933,59 @@ def _stl_key_from_name(fn):
     if any(w in n for w in ("lower", "inf", "mand", "bas")): return "LowerJawScan"
     return None
 
+_RADIO_DIR_KW = ("radio", "radiographie", "rx", "pano", "teleradio", "ceph")
+_PHOTO_DIR_KW = ("photo", "cliche", "clich", "intra", "exo", "endo")
+_MODEL_DIR_KW = ("modele", "model", "stl", "empreinte", "scan", "mesh", "3d")
+_RADIO_NAME_KW = ("pano", "panoramique", "trp", "teleradio", "telerad", "teleradiographie", "cephalo", "ceph")
+
+def _is_radio_filename(fn):
+    """Vrai si le NOM de fichier est celui d'une radio : export DICOM (quasi que des chiffres/points)
+    ou mot-clé (pano, TRP, téléradio…)."""
+    stem = os.path.splitext(os.path.basename(fn))[0]
+    import re as _re
+    if len(stem) >= 12 and _re.fullmatch(r"[0-9.\-_ ]+", stem):
+        return True
+    n = MI._norm(stem)
+    return any(k in n for k in _RADIO_NAME_KW)
+
 def _build_new_patient_from_drop(stage_dir, fallback_name=""):
-    """IMPORT UNIVERSEL d'un NOUVEAU PATIENT depuis un dépôt (dossier et/ou Word et/ou fichiers en vrac).
-    - Identité : lue du bilan Word s'il y en a un, sinon à partir du NOM DU DOSSIER déposé, sinon fallback.
-    - Images : les photos/radios du dossier si présentes, sinon celles EXTRAITES du Word (cas « Word seul ».)
-    - Classement automatique (règles v3.3), radios, rendus 3D -> captures, STL -> modèles. Tout en galerie.
-    Renvoie (slug, rid, summary)."""
+    """IMPORT UNIVERSEL d'un NOUVEAU PATIENT depuis un dépôt (dossier avec sous-dossiers, Word, ou vrac).
+    TRI PAR SOUS-DOSSIER ET PAR NOM, robuste au bazar des exports :
+      • un dossier qui contient un .stl = MODÈLES -> les .stl aux modèles, ses images = rendus (captures) ;
+      • un dossier « Radio/RX » OU un nom quasi-numérique (DICOM) / pano·TRP·téléradio = RADIOS ;
+      • un dossier « Photo » ou les autres images = PHOTOS cliniques (classées aux 8 vues, règles v3.3) ;
+      • le .docx = données du bilan (et, s'il n'y a pas de photos dans le dossier, ses images servent aussi).
+    Identité : Word > nom du dossier déposé > fallback. Renvoie (slug, rid, summary)."""
     from PIL import Image as _I
     import tempfile
-    # 1) inventaire du dépôt
-    docx = None; loose_imgs = []; stls = []
-    for root, _dirs, fs in os.walk(stage_dir):
+    # 1) repérer les dossiers de MODÈLES (ceux qui contiennent un .stl/.ply/.obj/.3ox)
+    model_dirs = set()
+    for root, _d, fs in os.walk(stage_dir):
+        if any(f.lower().endswith((".stl", ".ply", ".obj", ".3ox")) for f in fs):
+            model_dirs.add(os.path.normpath(root))
+    # 2) inventaire trié par TYPE
+    docx = None; photos_cand = []; radios_known = []; renders_known = []; stls = []
+    for root, _d, fs in os.walk(stage_dir):
+        rootn = os.path.normpath(root)
+        parts = [MI._norm(x) for x in os.path.relpath(root, stage_dir).split(os.sep) if x not in (".", "")]
+        in_model = (rootn in model_dirs) or any(any(k in p for k in _MODEL_DIR_KW) for p in parts)
+        in_radio = any(any(k in p for k in _RADIO_DIR_KW) for p in parts)
+        in_photo = any(any(k in p for k in _PHOTO_DIR_KW) for p in parts)
         for fn in sorted(fs):
-            if fn.startswith("."):
+            if fn.startswith(".") or fn.startswith("~$"):
                 continue
             fp = os.path.join(root, fn); ext = os.path.splitext(fn)[1].lower()
-            if ext == ".docx" and not fn.startswith("~$"):
-                if docx is None:
-                    docx = fp
-            elif ext in (".jpg", ".jpeg", ".png"):
-                loose_imgs.append(fp)
+            if ext == ".docx":
+                if docx is None: docx = fp
             elif ext in (".stl", ".ply", ".obj"):
                 stls.append(fp)
-    # 2) identité (Word > nom du dossier > fallback)
+            elif ext in (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".heic"):
+                if in_model:           renders_known.append(fp)     # image dans un dossier modèle = rendu
+                elif in_radio:         radios_known.append(fp)
+                elif in_photo:         photos_cand.append(fp)
+                elif _is_radio_filename(fn): radios_known.append(fp)
+                else:                  photos_cand.append(fp)
+    # 3) identité (Word > nom du dossier > fallback)
     res = None
     if docx:
         try: res = WI.parse_word_bilan(docx)
@@ -6972,49 +7007,55 @@ def _build_new_patient_from_drop(stage_dir, fallback_name=""):
     if res:
         apply_word_to_record(r, res); save_rec(slug, rid, r)
     base = rdir(slug, rid)
-    # 3) choix des images : le dossier d'abord ; sinon (ou si trop peu) les images du Word
-    word_imgs = []
-    if docx:
+    # 4) si le dossier n'a pas (assez) de photos, on utilise les images DU WORD
+    if len(photos_cand) < 6 and docx:
         _tmp = tempfile.mkdtemp()
         try:
-            word_imgs = list(MI.extract_word_media(docx, _tmp))
-            try: word_imgs += _extract_vector_media(docx, _tmp)
+            photos_cand = list(photos_cand) + list(MI.extract_word_media(docx, _tmp))
+            try: photos_cand += _extract_vector_media(docx, _tmp)
             except Exception: pass
         except Exception:
-            word_imgs = []
-    imgs = loose_imgs if len(loose_imgs) >= 6 else (loose_imgs + word_imgs)
-    # 4) classement + rangement
+            pass
+    # 5) classement des PHOTOS (les radios/rendus mal rangés dans le vrac sont re-séparés ici)
     counts = {"photos": 0, "radios": 0, "captures": 0, "stl": 0}
     try:
-        photos, radios, renders = _classify_photo_set(imgs)
+        photos, radios_c, renders_c = _classify_photo_set(photos_cand)
     except Exception:
-        photos, radios, renders = {}, [], []
+        photos, radios_c, renders_c = {}, [], []
     for view, src in photos.items():
         if _place_as_is(src, base, view): counts["photos"] += 1
-    for src in radios:
-        if _save_radio(src, base): counts["radios"] += 1
-    if renders:
+    # 6) RADIOS : d'abord celles détectées dans le vrac, puis les radios du dossier (prioritaires -> en dernier)
+    rad_keys = set()
+    for src in list(radios_c) + list(radios_known):
+        if _save_radio(src, base):
+            rad_keys.add(_radio_key(src))
+    counts["radios"] = len(rad_keys)
+    # 7) RENDUS 3D -> captures
+    all_renders = list(renders_known) + [x for x in renders_c if x not in set(renders_known)]
+    if all_renders:
         cap = os.path.join(base, "07_modele_captures"); os.makedirs(cap, exist_ok=True)
-        for i, src in enumerate(renders):
+        for i, src in enumerate(all_renders):
             try:
                 _I.open(src).convert("RGB").save(os.path.join(cap, "capture_%02d.jpg" % i), quality=90)
                 counts["captures"] += 1
             except Exception: pass
-    _rad = set(radios); _ren = set(renders)
-    _to_gallery(base, [q for q in imgs if q not in _rad and q not in _ren])
-    # 5) modèles STL
+    # 8) galerie = les photos cliniques candidates (hors radios/rendus re-détectés)
+    _skip = set(radios_c) | set(renders_c)
+    _to_gallery(base, [q for q in photos_cand if q not in _skip])
+    # 9) modèles STL (Upper/Lower d'après le nom, sinon le 1er = Upper, le 2e = Lower)
+    _stl_keys = set()
     for src in stls:
-        key = _stl_key_from_name(src)
-        if key:
-            try: shutil.copy(src, os.path.join(base, "04_stl_bruts", key + ".stl")); counts["stl"] += 1
-            except Exception: pass
-    # 6) finalisation
+        key = _stl_key_from_name(src) or ("UpperJawScan" if "UpperJawScan" not in _stl_keys else "LowerJawScan")
+        try: shutil.copy(src, os.path.join(base, "04_stl_bruts", key + ".stl")); _stl_keys.add(key)
+        except Exception: pass
+    counts["stl"] = len(_stl_keys)
+    # 10) finalisation
     r = load_rec(slug, rid); r["crops"] = {}; r["rotations"] = {}
     r["photos_verified"] = True; r["status"] = "processing"
     save_rec(slug, rid, r)
     try: _regenerate(slug, rid, pt, r, skip_stl=(counts["stl"] == 0))
     except Exception: pass
-    summary = dict(counts, nom=nom, word=bool(res), source=("dossier" if len(loose_imgs) >= 6 else ("word" if docx else "fichiers")))
+    summary = dict(counts, nom=nom, word=bool(res))
     return slug, rid, summary
 
 @app.route("/word_import", methods=["GET", "POST"])
