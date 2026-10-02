@@ -1,7 +1,7 @@
 {
- "version": "3.5",
- "notes": "Nouveau patient : respecte les sous-dossiers (dossier avec .stl = modeles, nom quasi-numerique/DICOM ou TRP/pano = radios, le reste = photos) pour ne plus melanger rendus 3D et photos ; nom du patient pris du dossier depose de facon fiable.",
- "ref": "dc6711968db2aa169f11268c83f0d8d0954583ce",
+ "version": "3.6",
+ "notes": "Nouveau patient : larborescence du dossier (sous-dossiers Photos/Radios/Modeles) est reconstruite correctement meme quand macOS envoie les fichiers a plat -> fini le tout-en-captures ; nom du patient pris du dossier de facon fiable.",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",

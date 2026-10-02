@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.5"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.6"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -1939,6 +1939,7 @@ def nouveau():
       '<input id=np_files type=file name=files multiple style="display:none" onchange="nppick(this)">'
       '<input id=np_folder type=file name=folder webkitdirectory directory multiple style="display:none" onchange="nppick(this)">'
       '<input type=hidden id=np_foldername name=folder_name>'
+      '<input type=hidden id=np_relpaths name=relpaths>'
       '</div>'
       '<div id=npstatus class=muted style="margin-top:10px;font-weight:600"></div>'
       '<div style="margin-top:10px"><input name=nom placeholder="Nom du patient (utile seulement si ni Word ni dossier nommé)" '
@@ -1950,6 +1951,8 @@ def nouveau():
       ' &nbsp;·&nbsp; Besoin d\'une <a href="%s">fiche vide à remplir à la main</a>.</div>'
       '<script>'
       'function nppick(inp){var o=inp.id===\'np_files\'?document.getElementById(\'np_folder\'):document.getElementById(\'np_files\');try{o.value=\'\';}catch(e){}'
+      'var rels=[];for(var i=0;i<inp.files.length;i++){rels.push(inp.files[i].webkitRelativePath||inp.files[i].name);}'
+      'var rp=document.getElementById(\'np_relpaths\');if(rp)rp.value=JSON.stringify(rels);'
       'var fn=document.getElementById(\'np_foldername\');if(fn){fn.value=\'\';'
       'if(inp.files.length&&inp.files[0].webkitRelativePath){fn.value=inp.files[0].webkitRelativePath.split(\'/\')[0];}}'
       'var n=inp.files.length;var nm=(fn&&fn.value)?(\' — dossier « \'+fn.value+\' »\'):\'\';'
@@ -1981,9 +1984,14 @@ def nouveau_go():
         flash("Dépose un dossier, un bilan Word, ou des fichiers."); return redirect(url_for("nouveau"))
     stage = tempfile.mkdtemp(prefix="np_")
     folder_name = ""
+    # WKWebView envoie les fichiers d'un dossier À PLAT (sans sous-dossiers). On reconstruit
+    # l'arborescence grâce aux chemins relatifs (webkitRelativePath) collectés côté navigateur.
+    try: rels = json.loads(request.form.get("relpaths", "") or "[]")
+    except Exception: rels = []
     try:
-        for uf in allf:
-            rp = (uf.filename or "").replace("\\", "/").lstrip("/")
+        for i, uf in enumerate(allf):
+            rp = (rels[i] if i < len(rels) and rels[i] else (uf.filename or ""))
+            rp = rp.replace("\\", "/").lstrip("/")
             if (not rp) or rp.endswith("/") or ".." in rp.split("/"):
                 continue
             if "/" in rp and not folder_name:
@@ -6958,9 +6966,14 @@ def _build_new_patient_from_drop(stage_dir, fallback_name=""):
     Identité : Word > nom du dossier déposé > fallback. Renvoie (slug, rid, summary)."""
     from PIL import Image as _I
     import tempfile
-    # 1) repérer les dossiers de MODÈLES (ceux qui contiennent un .stl/.ply/.obj/.3ox)
+    # 1) repérer les SOUS-dossiers de MODÈLES (ceux qui contiennent un .stl/.ply/.obj/.3ox).
+    #    NB : jamais la racine du dépôt — sinon, si le dépôt arrive à plat (fichiers tous au même
+    #    niveau), la présence d'un .stl ferait passer TOUTES les images pour des rendus.
+    stage_root = os.path.normpath(stage_dir)
     model_dirs = set()
     for root, _d, fs in os.walk(stage_dir):
+        if os.path.normpath(root) == stage_root:
+            continue
         if any(f.lower().endswith((".stl", ".ply", ".obj", ".3ox")) for f in fs):
             model_dirs.add(os.path.normpath(root))
     # 2) inventaire trié par TYPE
