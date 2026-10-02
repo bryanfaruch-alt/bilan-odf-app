@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.7"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.8"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2001,6 +2001,11 @@ def nouveau_go():
             uf.save(dst)
         fallback = (request.form.get("nom", "").strip() or folder_name
                     or request.form.get("folder_name", "").strip() or "")
+        # LOT ? -> un sous-dossier par patient : on part sur l'écran de récap
+        pats = _detect_patient_folders(stage)
+        if pats:
+            session["bulk_stage"] = stage
+            return redirect(url_for("nouveau_bulk"))
         slug, rid, summary = _build_new_patient_from_drop(stage, fallback_name=fallback)
     except Exception as e:
         shutil.rmtree(stage, ignore_errors=True)
@@ -2015,6 +2020,63 @@ def nouveau_go():
     flash("Patient « %s » créé — %s. Vérifie le classement ci-dessous : glisse une photo vers une autre vue si besoin." % (
         summary["nom"], ", ".join(parts)))
     return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
+
+@app.route("/nouveau/bulk")
+def nouveau_bulk():
+    """Récap d'un IMPORT EN MASSE : liste les patients détectés (un sous-dossier = un patient)."""
+    if not logged(): return redirect(url_for("login"))
+    stage = session.get("bulk_stage", "")
+    if not stage or not os.path.isdir(stage):
+        flash("Lot expiré — recommence le dépôt."); return redirect(url_for("nouveau"))
+    pats = _detect_patient_folders(stage)
+    if not pats:
+        flash("Aucun dossier patient détecté dans ce lot."); return redirect(url_for("nouveau"))
+    def _count(d):
+        ni = nr = nd = 0
+        for root, _dd, fs in os.walk(d):
+            for f in fs:
+                fl = f.lower()
+                if fl.endswith((".jpg", ".jpeg", ".png")): ni += 1
+                elif fl.endswith((".stl", ".ply", ".obj")): nd += 1
+                elif fl.endswith(".docx") and not f.startswith("~$"): nr += 1
+        return ni, nd, nr
+    rows = ""
+    for d in pats:
+        ni, nd, nr = _count(d)
+        rows += ('<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px">'
+                 '<b>%s</b><span class=muted style="font-size:12.5px">%d image(s)%s%s</span></div>') % (
+                 os.path.basename(d).replace("<", "&lt;"), ni,
+                 (" · %d modèle(s)" % nd) if nd else "", (" · bilan Word" if nr else ""))
+    body = ('<p class=muted><a href="%s">← Annuler</a></p><h1>Import en masse — %d patients détectés</h1>'
+            '<div class=flash style="background:var(--accw);border-color:var(--line)">Chaque sous-dossier devient '
+            '<b>un patient</b> (photos classées aux bonnes vues, radios, modèles). La génération des bilans Word/PDF '
+            'se fera à l\'ouverture de chaque fiche (pour que l\'import reste rapide).</div>'
+            '%s'
+            '<form method=post action="%s" style="margin-top:14px" onsubmit="this.querySelector(\'button\').innerHTML=\'<span class=spin></span> Import en cours… (ne ferme pas)\'">'
+            '<button class=btn>Importer les %d patients</button> '
+            '<a class="btn sec" href="%s">Annuler</a></form>') % (
+            url_for("nouveau"), len(pats), rows, url_for("nouveau_bulk_go"), len(pats), url_for("nouveau"))
+    return page(body, title="Import en masse")
+
+@app.route("/nouveau/bulk/go", methods=["POST"])
+def nouveau_bulk_go():
+    if not logged(): return redirect(url_for("login"))
+    stage = session.pop("bulk_stage", "")
+    if not stage or not os.path.isdir(stage):
+        flash("Lot expiré — recommence le dépôt."); return redirect(url_for("nouveau"))
+    pats = _detect_patient_folders(stage)
+    ok = 0; errs = []
+    for d in pats:
+        try:
+            _build_new_patient_from_drop(d, fallback_name=os.path.basename(d), do_regen=False)
+            ok += 1
+        except Exception as e:
+            errs.append(os.path.basename(d) + " : " + str(e)[:40])
+    shutil.rmtree(stage, ignore_errors=True)
+    msg = "%d patient(s) importé(s) en masse." % ok
+    if errs: msg += " Soucis : " + " | ".join(errs[:4])
+    flash(msg)
+    return redirect(url_for("dashboard"))
 
 @app.route("/from_doctolib")
 def from_doctolib():
@@ -2630,70 +2692,74 @@ def import_patient():
             flash("Dépose un fichier ZIP Bilan ODF, ou le dossier/Word du patient envoyé par le confrère."); return redirect(url_for("import_patient"))
         try: rels = json.loads(request.form.get("relpaths", "") or "[]")
         except Exception: rels = []
-        folder_name = ""; mode = None; newslug = None
+        folder_name = ""; stage = None
+        is_zip = (len(allf) == 1 and (allf[0].filename or "").lower().endswith(".zip"))
         try:
-            if len(allf) == 1 and (allf[0].filename or "").lower().endswith(".zip"):
+            # ---- A) un vrai FICHIER .zip : c'est (presque toujours) un export Bilan ODF ----
+            if is_zip:
                 zbytes = allf[0].read()
-            else:
-                # dossier / fichiers -> zip en mémoire ; arborescence reconstruite via relpaths
-                # (WKWebView envoie à plat, donc on se fie aux chemins relatifs du navigateur)
-                mem = _io.BytesIO()
-                with zipfile.ZipFile(mem, "w", zipfile.ZIP_DEFLATED) as zz:
-                    for i, uf in enumerate(allf):
-                        rp = (rels[i] if i < len(rels) and rels[i] else (uf.filename or "")).replace("\\", "/").lstrip("/")
-                        if (not rp) or rp.endswith("/") or ".." in rp.split("/"): continue
-                        if "/" in rp and not folder_name: folder_name = rp.split("/")[0]
-                        zz.writestr(rp, uf.read())
-                zbytes = mem.getvalue()
-            with zipfile.ZipFile(_io.BytesIO(zbytes)) as z:
-                names = z.namelist()
-                exp = next((n for n in names if n.endswith("_bilanodf_export.json")), None)
-                prefix = exp[:-len("_bilanodf_export.json")] if exp else ""
-                if exp is not None and (prefix + "patient/patient.json") in names:
-                    # (1) Export patient Bilan ODF -> restauration A L'IDENTIQUE
-                    man = json.loads(z.read(exp).decode("utf-8"))
-                    nom = (man.get("nom", "") or "Patient importé")
-                    newslug = slugify(nom) + "_" + datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
-                    dest = pdir(newslug); os.makedirs(dest, exist_ok=True)
-                    base_p = prefix + "patient/"
-                    for n in names:
-                        if not n.startswith(base_p): continue
-                        rel = n[len(base_p):]
-                        if (not rel) or rel.endswith("/") or ".." in rel.split("/") or rel.startswith("/"): continue
-                        tp = os.path.join(dest, rel)
-                        os.makedirs(os.path.dirname(tp) or dest, exist_ok=True)
+                newslug = None; mode = None
+                with zipfile.ZipFile(_io.BytesIO(zbytes)) as z:
+                    names = z.namelist()
+                    exp = next((n for n in names if n.endswith("_bilanodf_export.json")), None)
+                    prefix = exp[:-len("_bilanodf_export.json")] if exp else ""
+                    if exp is not None and (prefix + "patient/patient.json") in names:
+                        # (1) Export patient Bilan ODF -> restauration A L'IDENTIQUE
+                        man = json.loads(z.read(exp).decode("utf-8"))
+                        nom = (man.get("nom", "") or "Patient importé")
+                        newslug = slugify(nom) + "_" + datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+                        dest = pdir(newslug); os.makedirs(dest, exist_ok=True)
+                        base_p = prefix + "patient/"
+                        for n in names:
+                            if not n.startswith(base_p): continue
+                            rel = n[len(base_p):]
+                            if (not rel) or rel.endswith("/") or ".." in rel.split("/") or rel.startswith("/"): continue
+                            tp = os.path.join(dest, rel)
+                            os.makedirs(os.path.dirname(tp) or dest, exist_ok=True)
+                            with z.open(n) as sf, open(tp, "wb") as of:
+                                shutil.copyfileobj(sf, of)
+                        pj = os.path.join(dest, "patient.json")
+                        d = json.load(open(pj, encoding="utf-8")); d["slug"] = newslug
+                        if not d.get("nom"): d["nom"] = nom
+                        json.dump(d, open(pj, "w"), ensure_ascii=False, indent=1)
+                        mode = "identique"
+                    else:
+                        # (2) ZIP « Dossier ODF » (structure Photos/Radios/… par temps)
+                        newslug = _import_transfert_zip(z, names)
+                        mode = "transfert" if newslug else None
+                if newslug:
+                    flash("Patient importé à l'identique (aucune régénération nécessaire)." if mode == "identique"
+                          else "Dossier importé : photos, radios, modèles 3D et données cliniques.")
+                    return redirect(url_for("suivi", slug=newslug))
+                # ZIP non reconnu -> on extrait et on traite comme un dépôt brut
+                stage = tempfile.mkdtemp(prefix="tr_")
+                with zipfile.ZipFile(_io.BytesIO(zbytes)) as z:
+                    for n in z.namelist():
+                        if n.endswith("/") or ".." in n.split("/"): continue
+                        tp = os.path.join(stage, n)
+                        os.makedirs(os.path.dirname(tp) or stage, exist_ok=True)
                         with z.open(n) as sf, open(tp, "wb") as of:
                             shutil.copyfileobj(sf, of)
-                    pj = os.path.join(dest, "patient.json")
-                    d = json.load(open(pj, encoding="utf-8")); d["slug"] = newslug
-                    if not d.get("nom"): d["nom"] = nom
-                    json.dump(d, open(pj, "w"), ensure_ascii=False, indent=1)
-                    mode = "identique"
-                else:
-                    # (2) Dossier de transfert Bilan ODF -> reconstruction rapide (placement par nom)
-                    newslug = _import_transfert_zip(z, names)
-                    mode = "transfert" if newslug else None
-        except Exception as e:
-            flash("Import impossible : %s" % e); return redirect(url_for("import_patient"))
-        if newslug:
-            flash("Patient importé à l'identique (aucune régénération nécessaire)." if mode == "identique"
-                  else "Dossier importé : photos, radios, modèles 3D, et — si présents — motif, Steiner, synthèse et objectifs/moyens.")
-            return redirect(url_for("suivi", slug=newslug))
-        # (3) Ni export ni dossier de transfert Bilan ODF : dossier/Word BRUT d'un confrère
-        #     -> traité exactement comme un « Nouveau patient » (tri par sous-dossier, classement auto).
-        try:
-            stage = tempfile.mkdtemp(prefix="tr_")
-            with zipfile.ZipFile(_io.BytesIO(zbytes)) as z:
-                for n in z.namelist():
-                    if n.endswith("/") or ".." in n.split("/"): continue
-                    tp = os.path.join(stage, n)
-                    os.makedirs(os.path.dirname(tp) or stage, exist_ok=True)
-                    with z.open(n) as sf, open(tp, "wb") as of:
-                        shutil.copyfileobj(sf, of)
+            # ---- B) un DOSSIER / un WORD brut d'un confrère -> moteur « Nouveau patient » ----
+            else:
+                stage = tempfile.mkdtemp(prefix="tr_")
+                for i, uf in enumerate(allf):
+                    rp = (rels[i] if i < len(rels) and rels[i] else (uf.filename or "")).replace("\\", "/").lstrip("/")
+                    if (not rp) or rp.endswith("/") or ".." in rp.split("/"): continue
+                    if "/" in rp and not folder_name: folder_name = rp.split("/")[0]
+                    dst = os.path.join(stage, rp)
+                    os.makedirs(os.path.dirname(dst) or stage, exist_ok=True)
+                    uf.save(dst)
+            # LOT (plusieurs patients) ? -> écran de récap
+            pats = _detect_patient_folders(stage)
+            if pats:
+                session["bulk_stage"] = stage
+                return redirect(url_for("nouveau_bulk"))
             slug, rid, summary = _build_new_patient_from_drop(stage, fallback_name=folder_name)
-            shutil.rmtree(stage, ignore_errors=True)
         except Exception as e:
-            flash("Transfert non reconnu et import impossible : %s" % str(e)[:150]); return redirect(url_for("import_patient"))
+            if stage: shutil.rmtree(stage, ignore_errors=True)
+            flash("Import impossible : %s" % str(e)[:150]); return redirect(url_for("import_patient"))
+        shutil.rmtree(stage, ignore_errors=True)
         flash("Patient « %s » importé depuis le transfert — %d photo(s), %d radio(s). Vérifie le classement si besoin." % (
             summary["nom"], summary["photos"], summary["radios"]))
         return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
@@ -6989,7 +7055,7 @@ def _is_radio_filename(fn):
     n = MI._norm(stem)
     return any(k in n for k in _RADIO_NAME_KW)
 
-def _build_new_patient_from_drop(stage_dir, fallback_name=""):
+def _build_new_patient_from_drop(stage_dir, fallback_name="", do_regen=True):
     """IMPORT UNIVERSEL d'un NOUVEAU PATIENT depuis un dépôt (dossier avec sous-dossiers, Word, ou vrac).
     TRI PAR SOUS-DOSSIER ET PAR NOM, robuste au bazar des exports :
       • un dossier qui contient un .stl = MODÈLES -> les .stl aux modèles, ses images = rendus (captures) ;
@@ -7099,10 +7165,59 @@ def _build_new_patient_from_drop(stage_dir, fallback_name=""):
     r = load_rec(slug, rid); r["crops"] = {}; r["rotations"] = {}
     r["photos_verified"] = True; r["status"] = "processing"
     save_rec(slug, rid, r)
-    try: _regenerate(slug, rid, pt, r, skip_stl=(counts["stl"] == 0))
-    except Exception: pass
+    if do_regen:   # en IMPORT EN MASSE on saute la génération Word/PDF (trop lourde) -> régénérée à l'ouverture
+        try: _regenerate(slug, rid, pt, r, skip_stl=(counts["stl"] == 0))
+        except Exception: pass
     summary = dict(counts, nom=nom, word=bool(res))
     return slug, rid, summary
+
+# ---- IMPORT EN MASSE : un dossier qui contient UN SOUS-DOSSIER PAR PATIENT ----
+def _descend_single(root):
+    """Descend tant qu'il n'y a qu'un seul sous-dossier (et aucun fichier) — pour retomber sur
+    le vrai dossier déposé même s'il est emballé dans un ou plusieurs dossiers de tête."""
+    for _ in range(6):
+        try: es = [e for e in os.listdir(root) if not e.startswith(".")]
+        except Exception: return root
+        dirs = [e for e in es if os.path.isdir(os.path.join(root, e))]
+        files = [e for e in es if os.path.isfile(os.path.join(root, e))]
+        if len(dirs) == 1 and not files:
+            root = os.path.join(root, dirs[0]); continue
+        return root
+    return root
+
+def _is_patient_folder(d):
+    """Un sous-dossier est « un patient » s'il contient un bilan Word, un sous-dossier de type
+    (Photo/Radio/Modèle) ou un modèle .stl — bref la structure d'un dossier patient."""
+    try:
+        for e in os.listdir(d):
+            p = os.path.join(d, e)
+            if os.path.isdir(p):
+                n = MI._norm(e)
+                if any(k in n for k in (_PHOTO_DIR_KW + _RADIO_DIR_KW + _MODEL_DIR_KW)):
+                    return True
+    except Exception:
+        return False
+    for root, _dd, fs in os.walk(d):
+        for f in fs:
+            fl = f.lower()
+            if (fl.endswith(".docx") and not f.startswith("~$")) or fl.endswith((".stl", ".ply", ".obj")):
+                return True
+    return False
+
+def _detect_patient_folders(stage_dir):
+    """Renvoie la liste des sous-dossiers = patients si le dépôt est un LOT (≥2 patients), sinon []."""
+    root = _descend_single(stage_dir)
+    try:
+        subs = sorted(os.path.join(root, e) for e in os.listdir(root)
+                      if os.path.isdir(os.path.join(root, e)) and not e.startswith("."))
+    except Exception:
+        return []
+    # si le dossier contient lui-même des sous-dossiers de TYPE (Photo/Radio/Modèle), c'est UN patient
+    for s in subs:
+        if any(k in MI._norm(os.path.basename(s)) for k in (_PHOTO_DIR_KW + _RADIO_DIR_KW + _MODEL_DIR_KW)):
+            return []
+    pats = [s for s in subs if _is_patient_folder(s)]
+    return pats if len(pats) >= 2 else []
 
 @app.route("/word_import", methods=["GET", "POST"])
 def word_import():
