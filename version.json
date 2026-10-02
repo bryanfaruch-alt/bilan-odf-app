@@ -1,7 +1,7 @@
 {
  "version": "3.8",
  "notes": "Transfert : un dossier/Word brut dun confrere passe par le moteur robuste (fini le tout-n-importe-ou) ; _import_transfert_zip reserve aux vrais ZIP Bilan ODF. + Import EN MASSE : un dossier contenant un sous-dossier par patient -> ecran de recap -> import de tous (chacun classe automatiquement).",
- "ref": "",
+ "ref": "79cb24aae2f46e4eeb40f2fa6c4372a317860337",
  "files": [
   "app.py",
   "run_native.py",
