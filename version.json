@@ -1,7 +1,7 @@
 {
  "version": "3.6",
  "notes": "Nouveau patient : larborescence du dossier (sous-dossiers Photos/Radios/Modeles) est reconstruite correctement meme quand macOS envoie les fichiers a plat -> fini le tout-en-captures ; nom du patient pris du dossier de facon fiable.",
- "ref": "",
+ "ref": "f9d0c7b4e7b16b8ad5719771e19d851dd5fc6f2f",
  "files": [
   "app.py",
   "run_native.py",
