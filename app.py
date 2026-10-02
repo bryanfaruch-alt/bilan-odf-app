@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.8"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.9"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2485,11 +2485,10 @@ def patient(slug):
     <div class=card><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:10px;flex-wrap:wrap">
     <b>Bilans &amp; réévaluations</b>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <a class="btn sec" href="%s" title="Génère un dossier complet (PDF + Photos/Radios/STL) dans Téléchargements — pour un correspondant" onclick="return slowGo(this,'G&eacute;n&eacute;ration du dossier… (quelques secondes)')">&#128194; Transfert de dossier</a>
-      <a class="btn sec" href="%s" title="Exporter le patient pour un autre poste Bilan ODF — copie identique et réimportable (instantané)" onclick="return slowGo(this,'Export du patient\\u2026')">&#8681; Exporter le patient</a>
+      <a class="btn sec" href="%s" title="Envoyer ce patient à un confrère (avec ou sans Bilan ODF)">&#128228; Exporter / transférer</a>
       <a class=btn href="%s">+ Nouvelle réévaluation</a></div></div>
     <div class=reclist>%s</div></div>%s""" % (
-        phead(slug, pt, "bilans"), url_for("transfert_dossier", slug=slug), url_for("export_patient", slug=slug), url_for("reeval", slug=slug),
+        phead(slug, pt, "bilans"), url_for("exporter", slug=slug), url_for("reeval", slug=slug),
         rows or "<div class=recsub style='padding:12px 4px'>Aucun enregistrement.</div>", trash_html), title=pt.get("nom", ""))
 
 # ======================================================================
@@ -2619,6 +2618,97 @@ def export_patient(slug):
         except Exception: pass
         flash("Export impossible : %s" % e); return redirect(url_for("patient", slug=slug))
     flash("Patient exporté dans Téléchargements : %s — fichier Bilan ODF réimportable à l'identique." % os.path.basename(out))
+    return redirect(url_for("patient", slug=slug))
+
+@app.route("/patient/<slug>/exporter")
+def exporter(slug):
+    """Page d'export : 2 choix clairs selon que le confrère a l'app ou non."""
+    if not logged(): return redirect(url_for("login"))
+    pt = load_patient(slug)
+    if not pt: abort(404)
+    body = ('<p class=muted><a href="%s">← Fiche patient</a></p><h1>Exporter / transférer — %s</h1>'
+      '<div class=flash style="background:var(--accw);border-color:var(--line)">Deux façons d\'envoyer ce patient à un confrère — '
+      'choisis selon qu\'il a Bilan ODF ou non.</div>'
+      '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px">'
+      '<div class=card style="flex:1;min-width:270px">'
+      '<div style="font-size:26px">&#128230;</div><h3 style="margin:6px 0;color:var(--acc)">Confrère qui a Bilan ODF</h3>'
+      '<p class=muted style="font-size:13.5px">Un fichier <b>.zip</b> qu\'il remet dans son app (menu « Transfert reçu ») — '
+      'restauré <b>à l\'identique</b> : photos classées, radios, modèles 3D, Steiner, synthèse, plan. Instantané.</p>'
+      '<a class=btn href="%s" onclick="return slowGo(this,\'Export…\')">&#8681; Générer le fichier .zip</a></div>'
+      '<div class=card style="flex:1;min-width:270px">'
+      '<div style="font-size:26px">&#128196;</div><h3 style="margin:6px 0;color:var(--acc)">Confrère sans l\'app</h3>'
+      '<p class=muted style="font-size:13.5px">Un <b>dossier lisible</b> (PDF du bilan + <b>photos numérotées et nommées</b> + '
+      'radios + aperçus des modèles) que n\'importe qui peut ouvrir, sans Bilan ODF.</p>'
+      '<a class=btn href="%s" onclick="return slowGo(this,\'Génération du dossier… (quelques secondes)\')">&#128194; Générer le dossier + PDF</a></div>'
+      '</div>') % (url_for("patient", slug=slug), pt.get("nom", ""),
+                   url_for("export_patient", slug=slug), url_for("export_lisible", slug=slug))
+    return page(body, title="Exporter")
+
+@app.route("/patient/<slug>/export_lisible")
+def export_lisible(slug):
+    """Export LISIBLE pour un confrère SANS l'app : un .zip avec le PDF du bilan + les photos
+    NUMÉROTÉES ET NOMMÉES (en clair), les radios, et les aperçus 3D. Non destiné à la réimport."""
+    if not logged(): return redirect(url_for("login"))
+    pt = load_patient(slug)
+    if not pt: abort(404)
+    import zipfile, tempfile
+    import bilan_pdf_rl
+    recs = _ordered_records(slug, pt)
+    safe = _safe_name(pt.get("nom", "patient"))
+    dl = os.path.expanduser("~/Downloads")
+    if not os.path.isdir(dl): dl = os.path.expanduser("~/Desktop")
+    if not os.path.isdir(dl): dl = os.path.expanduser("~")
+    logo = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "chu_nice.png")
+    prac = (get_settings().get("praticien") or "").strip() or "Dr Bryan Faruch"
+    _tmp = tempfile.mkdtemp()
+    pdf_path = os.path.join(_tmp, "Bilan %s.pdf" % safe)
+    try:
+        bilan_pdf_rl.build_pdf(slug, pdf_path, practitioner=prac, logo=logo if os.path.exists(logo) else None)
+    except Exception as e:
+        shutil.rmtree(_tmp, ignore_errors=True)
+        flash("Erreur lors de la génération du PDF : %s" % e); return redirect(url_for("patient", slug=slug))
+    zip_path = os.path.join(dl, "Bilan ODF - %s.zip" % safe); _n = 1
+    while os.path.exists(zip_path):
+        zip_path = os.path.join(dl, "Bilan ODF - %s (%d).zip" % (safe, _n)); _n += 1
+    root = "Bilan ODF - %s" % safe
+    RADIO_LBL = {"panoramique": "Panoramique", "teleradiographie_profil": "Teleradiographie de profil"}
+    multi = len(recs) > 1
+    try:
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+            if os.path.exists(pdf_path):
+                z.write(pdf_path, arcname="%s/%s" % (root, os.path.basename(pdf_path)))
+            for idx, (rid, r) in enumerate(recs):
+                base = rdir(slug, rid)
+                tp = root if not multi else "%s/%02d - %s" % (root, idx + 1, _safe_name(_rec_label(idx, r)))
+                # Photos numérotées et nommées (ordre standard)
+                for i, (key, label) in enumerate(PHOTO_FIELDS):
+                    for sub in ("02_photos_traitees", "01_photos_brutes"):
+                        fp = os.path.join(base, sub, key + ".jpg")
+                        if os.path.exists(fp):
+                            z.write(fp, arcname="%s/Photos/%02d - %s.jpg" % (tp, i + 1, label)); break
+                # Radios
+                for key, lab in RADIO_LBL.items():
+                    fp = os.path.join(base, "03_radios", key + ".jpg")
+                    if os.path.exists(fp):
+                        z.write(fp, arcname="%s/Radios/%s.jpg" % (tp, lab))
+                wc = os.path.join(base, "06_webceph")
+                if os.path.isdir(wc):
+                    k = 0
+                    for f in sorted(os.listdir(wc)):
+                        if f.lower().endswith((".jpg", ".jpeg", ".png")):
+                            k += 1; z.write(os.path.join(wc, f), arcname="%s/Radios/Trace cephalometrique %d.jpg" % (tp, k))
+                # Aperçus des modèles 3D
+                for mdir in ("05_stl_rendus", "07_modele_captures"):
+                    sd = os.path.join(base, mdir)
+                    if os.path.isdir(sd):
+                        for f in sorted(os.listdir(sd)):
+                            if f.lower().endswith((".jpg", ".jpeg", ".png")) and not f.startswith("."):
+                                z.write(os.path.join(sd, f), arcname="%s/Modeles 3D/%s" % (tp, f))
+    except Exception as e:
+        shutil.rmtree(_tmp, ignore_errors=True)
+        flash("Erreur lors de la création du dossier : %s" % e); return redirect(url_for("patient", slug=slug))
+    shutil.rmtree(_tmp, ignore_errors=True)
+    flash("Dossier lisible enregistré dans Téléchargements : %s (PDF + photos numérotées + radios)." % os.path.basename(zip_path))
     return redirect(url_for("patient", slug=slug))
 
 def _import_transfert_zip(z, names):
