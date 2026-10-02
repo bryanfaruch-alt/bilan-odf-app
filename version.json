@@ -1,7 +1,7 @@
 {
  "version": "3.7",
  "notes": "Transfert recu unifie : une seule page qui accepte un ZIP Bilan ODF (restaure a lidentique) OU un dossier/Word brut dun confrere (cree et classe comme un nouveau patient, tri par sous-dossier).",
- "ref": "",
+ "ref": "a143c9e5f26e52896a8ba9efc0e3f2883a5ed347",
  "files": [
   "app.py",
   "run_native.py",
