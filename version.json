@@ -1,7 +1,7 @@
 {
  "version": "3.10",
  "notes": "Menu nettoyé : Nouveau patient + Transfert reçu (fin des entrees d'import redondantes)",
- "ref": "",
+ "ref": "c02b39906f58fd0d7effe2d0ac081549a0d62ad2",
  "files": [
   "app.py",
   "run_native.py",
