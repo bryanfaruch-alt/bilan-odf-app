@@ -1,7 +1,7 @@
 {
- "version": "3.3",
- "notes": "Extraction/classement des photos fiabilise : visages detectes par orientation (robuste aux peaux colorees), rendus 3D exclus (fond clair ou noir), aucune photo du Word perdue, radios toujours detectees.",
- "ref": "77fbc829a9860d1e7382ab20e1ea2d5cfce15d37",
+ "version": "3.4",
+ "notes": "Nouveau patient simplifie : un seul depot (dossier complet, bilan Word seul, ou dossier au nom du patient sans Word). Cree la fiche + range tout automatiquement (donnees Word, photos, radios, modeles). Le Word seul utilise aussi ses images.",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",
