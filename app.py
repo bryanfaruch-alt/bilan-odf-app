@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.2"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.3"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -3669,12 +3669,20 @@ def _is_radio_feat(x):
     return x["muc"] < 0.10 and x["grayfrac"] < 0.20
 
 def _split_faces_intra(nonrad):
-    """Sépare visages / intra-oraux par ÉCART relatif de muqueuse (robuste à la couleur de peau
-    et à l'orientation) : les visages ont nettement MOINS de muqueuse que les intra-oraux. On
-    cherche la plus grande rupture parmi les 3 premières photos (≤3 visages par bilan). Repli
-    sur un seuil absolu si aucune rupture nette. Renvoie (faces, intra) — mêmes dicts en entrée."""
+    """Sépare visages / intra-oraux. Signal PRINCIPAL = l'orientation : les photos de visage sont
+    verticales (portrait) et les intra-orales horizontales (paysage) — très fiable sur les gabarits
+    standard, et ROBUSTE à la couleur de peau (le critère muqueuse ratait les peaux/lèvres rouges,
+    muc jusqu'à 0.52). REPLI (aucun portrait, ou trop de portraits = bilan tout en paysage) : rupture
+    relative de muqueuse. Renvoie (faces, intra) — mêmes dicts en entrée."""
     if not nonrad:
         return [], []
+    # 1) ORIENTATION : 1 à 3 portraits -> ce sont les visages (cas des gabarits standard).
+    portraits = [x for x in nonrad if x["aspect"] < 1.15]
+    if 1 <= len(portraits) <= 3:
+        faces = sorted(portraits, key=lambda x: x["muc"])[:3]
+        fset = set(id(x) for x in faces)
+        return faces, [x for x in nonrad if id(x) not in fset]
+    # 2) REPLI : rupture relative de muqueuse (photos toutes en paysage, ou >3 portraits).
     order = sorted(nonrad, key=lambda x: x["muc"])
     mucs = [x["muc"] for x in order]
     best_k, best_gap = 0, 0.0
@@ -3683,7 +3691,7 @@ def _split_faces_intra(nonrad):
             gap = mucs[k] - mucs[k - 1]
             if gap > best_gap:
                 best_gap, best_k = gap, k
-    if best_k and best_gap >= 0.12 and mucs[best_k - 1] < 0.52:
+    if best_k and best_gap >= 0.12 and mucs[best_k - 1] < 0.58:
         faces = order[:best_k]
     else:
         faces = [x for x in order if x["muc"] < 0.30][:3]
@@ -3755,8 +3763,11 @@ def _classify_photo_set(paths):
     # et à l'orientation). L'ancien seuil absolu muc<0.25 ratait les visages à peau/lèvres
     # rougeaudes (muc 0.3–0.45) -> ils tombaient dans les cases intra-orales et des photos
     # manquaient. Le split relatif trouve la vraie rupture entre visages et intra-oraux.
-    # RENDUS 3D (scans sur fond noir) : exclus des vues cliniques (repris comme captures 3D).
-    renders = [x for x in nonrad if x.get("black", 0) > 0.30]
+    # RENDUS 3D (captures de modèles) : exclus des vues cliniques (repris comme captures).
+    # Deux cas : (a) arcade de dents SANS muqueuse et SYMÉTRIQUE (muc~0 & asym faible) — couvre
+    # les rendus sur fond clair ; (b) fond très noir. Un VISAGE de profil (muc faible mais TRÈS
+    # asymétrique) n'est jamais pris pour un rendu.
+    renders = [x for x in nonrad if (x["muc"] < 0.15 and x["asym"] < 0.15) or x.get("black", 0) > 0.60]
     nonrad = [x for x in nonrad if x not in renders]
     face_cand, intra = _split_faces_intra(nonrad)
     photos = {}

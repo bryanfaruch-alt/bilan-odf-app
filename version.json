@@ -1,7 +1,7 @@
 {
- "version": "3.2",
- "notes": "Classement des photos 100% fiable : plus dapprentissage pollue (reglal only), detecteur de sourire (plus dinversion sourire/repos), exclusion des rendus 3D, visage unique place correctement.",
- "ref": "525f822da19a133866b500a87972dfa1d82cb98e",
+ "version": "3.3",
+ "notes": "Extraction/classement des photos fiabilise : visages detectes par orientation (robuste aux peaux colorees), rendus 3D exclus (fond clair ou noir), aucune photo du Word perdue, radios toujours detectees.",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",
