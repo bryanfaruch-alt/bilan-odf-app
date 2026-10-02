@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.1"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.2"          # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -3590,11 +3590,13 @@ def _clin_feats(path):
     # quelle que soit l'orientation — les intra-orales n'ont quasi pas de peau)
     skin = ((R > 0.35) & (R >= G) & (G >= B) & ((R - B) > 0.03) & ((R - B) < 0.42) & (sat < 0.40) & ~muc)
     teeth = ((mx > 0.55) & (sat < 0.20)); g = a.mean(-1); c = slice(40, 80)
+    black = float((g < 0.12).mean())                                   # fond noir -> rendu 3D
+    smile = float(((mx > 0.55) & (sat < 0.25))[72:104, 35:85].mean())  # dents visibles (bouche) -> sourire
     return {"p": path, "aspect": w / max(1, h), "grayfrac": float((sat > 0.15).mean()),
             "muc": float(muc.mean()), "skin": float(skin.mean()), "asym": float(_np.abs(g - g[:, ::-1]).mean()),
             "cmuc": float(muc[c, c].mean()), "csat": float(sat[c, c].mean()), "cR": float(R[c, c].mean()),
             "lft": float(teeth[:, :60].mean()), "rgt": float(teeth[:, 60:].mean()),
-            "midteeth": float(teeth[45:80, 30:90].mean())}
+            "midteeth": float(teeth[45:80, 30:90].mean()), "black": black, "smile": smile}
 
 def _view_feat(path):
     """Vecteur RÉGIONAL (grille 3x3 sur muqueuse/dents/peau/luminance/saturation) : capture la
@@ -3621,6 +3623,11 @@ def _get_view_centroids():
     """Construit (une fois) les centroïdes de chaque vue à partir des photos DÉJÀ classées
     par l'utilisateur (01_photos_brutes/<vue>.jpg de toutes ses fiches). Renvoie None si
     l'utilisateur n'a pas encore assez d'exemples (-> repli sur les règles)."""
+    # v3.2 : APPRENTISSAGE DÉSACTIVÉ. Les centroïdes étaient appris sur les fiches "validées",
+    # dont beaucoup avaient été mal classées par l'ancien importateur -> l'apprentissage était
+    # pollué et re-mélangeait chaque nouvel import. On s'appuie désormais uniquement sur les
+    # règles (robustes et prévisibles). Pour réactiver un jour : enlever la ligne ci-dessous.
+    return None
     global _VIEW_CEN
     if _VIEW_CEN is not None:
         return _VIEW_CEN or None
@@ -3748,20 +3755,26 @@ def _classify_photo_set(paths):
     # et à l'orientation). L'ancien seuil absolu muc<0.25 ratait les visages à peau/lèvres
     # rougeaudes (muc 0.3–0.45) -> ils tombaient dans les cases intra-orales et des photos
     # manquaient. Le split relatif trouve la vraie rupture entre visages et intra-oraux.
+    # RENDUS 3D (scans sur fond noir) : exclus des vues cliniques (repris comme captures 3D).
+    renders = [x for x in nonrad if x.get("black", 0) > 0.30]
+    nonrad = [x for x in nonrad if x not in renders]
     face_cand, intra = _split_faces_intra(nonrad)
-    renders = []
     photos = {}
     rs = sorted(radios, key=lambda x: x["aspect"])
     if rs: photos["__radio1"] = rs[0]["p"]
     if len(rs) >= 2: photos["__radio2"] = rs[-1]["p"]
     if face_cand:
-        # profil = le plus asymetrique ; repos/sourire = les 2 photos les plus FRONTALES
-        # (asym la plus faible) -> jamais un 2e profil dans une case de face.
-        pf = max(face_cand, key=lambda x: x["asym"] + abs(x["lft"] - x["rgt"])); photos["exo_profil"] = pf["p"]
-        frontals = sorted([x for x in face_cand if x is not pf], key=lambda x: x["asym"])[:2]
-        fr = sorted(frontals, key=lambda x: x["midteeth"], reverse=True)
-        if len(fr) >= 1: photos["exo_face_sourire"] = fr[0]["p"]        # sourire = plus de dents
-        if len(fr) >= 2: photos["exo_face_repos"] = fr[1]["p"]
+        # profil = vue de PROFIL (asymétrie forte) ; un visage de face isolé ne va JAMAIS en profil.
+        # sourire/repos = frontaux triés par détection du sourire (dents visibles) — plus fiable
+        # que l'ancien "midteeth" qui inversait souvent sourire et repos.
+        profs = [x for x in face_cand if x["asym"] >= 0.16]
+        fronts = [x for x in face_cand if x not in profs]
+        if profs:
+            pf = max(profs, key=lambda x: x["asym"]); photos["exo_profil"] = pf["p"]
+            fronts += [x for x in profs if x is not pf]
+        fronts = sorted(fronts, key=lambda x: x.get("smile", 0), reverse=True)
+        if len(fronts) >= 1: photos["exo_face_sourire"] = fronts[0]["p"]
+        if len(fronts) >= 2: photos["exo_face_repos"] = fronts[1]["p"]
     occ = sorted(intra, key=lambda x: x["cmuc"], reverse=True)[:2]
     rest3 = [x for x in intra if x not in occ]
     if len(occ) >= 2:

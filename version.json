@@ -1,7 +1,7 @@
 {
- "version": "3.1",
- "notes": "Import Word : toutes les photos sont classees et les radios (pano/teleradio) detectees. Nouveau : reassigner une image de la galerie en radio, recherche dans la galerie, prise en charge des radios EMF.",
- "ref": "b1d357535b0ae713294e9112057c34c255820722",
+ "version": "3.2",
+ "notes": "Classement des photos 100% fiable : plus dapprentissage pollue (reglal only), detecteur de sourire (plus dinversion sourire/repos), exclusion des rendus 3D, visage unique place correctement.",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",
