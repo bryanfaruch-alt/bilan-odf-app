@@ -1,7 +1,7 @@
 {
- "version": "3.12",
- "notes": "Bloc d'instructions (vert) rendu permanent sur Nouveau patient et Transfert recu : il ne disparait plus au bout de quelques secondes.",
- "ref": "4fde6f7d10f590f3311ecfc06f163c7fe878c8cc",
+ "version": "3.13",
+ "notes": "Bloc Nouveau patient: explique l'import en masse (deposer le dossier parent contenant un sous-dossier par patient).",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",

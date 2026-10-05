@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.12"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.13"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -1926,6 +1926,8 @@ def nouveau():
       '<div class="flash ok keep">Dépose <b>le dossier du patient</b> '
       '(il peut contenir le bilan <b>Word</b>, les <b>photos</b>, les <b>radios</b>, les <b>modèles 3D</b>) — ou simplement son '
       '<b>bilan Word</b> seul. L\'app crée la fiche et range tout automatiquement, puis tu vérifies en un écran.<br>'
+      '<b>Plusieurs patients d\'un coup (import en masse) ?</b> Dépose ici le <b>dossier parent</b> qui contient '
+      '<b>un sous-dossier par patient</b> — l\'app les détecte tous et te propose un écran pour cocher ceux à importer.<br>'
       '<span class=muted style="font-size:12.5px">Astuces : un <b>dossier sans Word</b> → la fiche prend le <b>nom du dossier</b>. '
       'Un <b>Word seul</b> → les données <b>et</b> les photos du Word sont utilisées.</span></div>'
       '<form method=post action="%s" enctype=multipart/form-data id=npform '
