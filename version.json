@@ -1,7 +1,7 @@
 {
  "version": "3.16",
  "notes": "Correctifs: photos iPhone HEIC ne disparaissent plus (sips), recherche et filtres ne s'effacent plus mutuellement, PLY/OBJ convertis en STL (plus de rendu casse), message 'regenere' honnete en cas d'erreur.",
- "ref": "",
+ "ref": "68f3b71eba323553de5935d8627322e681cd844f",
  "files": [
   "app.py",
   "run_native.py",
