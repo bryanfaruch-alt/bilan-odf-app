@@ -1,7 +1,7 @@
 {
  "version": "3.13",
  "notes": "Bloc Nouveau patient: explique l'import en masse (deposer le dossier parent contenant un sous-dossier par patient).",
- "ref": "",
+ "ref": "5830e647757570aeccef7e49ba02207ee46ef35e",
  "files": [
   "app.py",
   "run_native.py",
