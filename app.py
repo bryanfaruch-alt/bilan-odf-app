@@ -9,6 +9,15 @@ from flask import (Flask, request, redirect, url_for, session, send_file,
                    render_template_string, flash, abort, jsonify)
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# Support des photos iPhone HEIC/HEIF : enregistre le décodeur si présent (sinon repli
+# sur `sips`, natif macOS, dans _fast_open). Avant, un .heic était accepté mais jamais
+# décodable -> la photo disparaissait en silence à l'import.
+try:
+    from pillow_heif import register_heif_opener as _reg_heif
+    _reg_heif(); _HEIF_OK = True
+except Exception:
+    _HEIF_OK = False
+
 # Chargement DIFFÉRÉ (lazy) des modules lourds : pipeline (VTK/trimesh 3D),
 # word_import & mass_import (python-docx), backup (reportlab...). Ils ne sont
 # importés qu'au 1er usage réel (rendu 3D, génération PDF/Word, import) et PLUS
@@ -30,7 +39,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.15"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.16"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -1078,7 +1087,7 @@ html[data-theme=dark] .flash.ok{background:rgba(74,222,128,.12);border-color:rgb
   </aside>
   <div class="main">
     <header class="topbar">
-      <form class="search" method="get" action="{{url_for('dashboard')}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg><input name="q" placeholder="Rechercher un patient…" value="{{ request.args.get('q','') }}"></form>
+      <form class="search" method="get" action="{{url_for('dashboard')}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg><input name="q" placeholder="Rechercher un patient…" value="{{ request.args.get('q','') }}">{% if request.args.get('statut') %}<input type=hidden name=statut value="{{request.args.get('statut','')}}">{% endif %}{% if request.args.get('staffer') %}<input type=hidden name=staffer value="{{request.args.get('staffer','')}}">{% endif %}{% if request.args.get('presenter') %}<input type=hidden name=presenter value="{{request.args.get('presenter','')}}">{% endif %}</form>
       <div class="spacer"></div>
       <button type="button" class="btn sec" onclick="(function(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);try{localStorage.setItem('bilan-theme',n);}catch(e){}})()" title="Clair / sombre" style="width:40px;height:40px;padding:0;justify-content:center;margin-right:2px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:18px;height:18px"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.5 6.5 0 0 0 9.8 9.8Z"/></svg></button>
       <a class="btn" href="{{url_for('nouveau')}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:17px;height:17px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Nouveau patient</a>
@@ -1823,6 +1832,7 @@ def dashboard():
             dot = '<span style="width:8px;height:8px;border-radius:50%%;background:%s"></span>' % color
         args = {}
         if key: args["statut"] = key
+        if q: args["q"] = q
         if tri != "ouvert": args["tri"] = tri
         if vue != "photo": args["vue"] = vue
         if fstaff: args["staffer"] = "1"
@@ -1839,6 +1849,7 @@ def dashboard():
     # --- Filtre "\u00c0 staffer" ---
     _stargs = {}
     if fstat in STATUT_MAP: _stargs["statut"] = fstat
+    if q: _stargs["q"] = q
     if tri != "ouvert": _stargs["tri"] = tri
     if vue != "photo": _stargs["vue"] = vue
     if fpres: _stargs["presenter"] = "1"
@@ -1851,6 +1862,7 @@ def dashboard():
     # --- Filtre "\u00c0 pr\u00e9senter" ---
     _prargs = {}
     if fstat in STATUT_MAP: _prargs["statut"] = fstat
+    if q: _prargs["q"] = q
     if tri != "ouvert": _prargs["tri"] = tri
     if vue != "photo": _prargs["vue"] = vue
     if fstaff: _prargs["staffer"] = "1"
@@ -2336,8 +2348,8 @@ def import_commit(slug, rid):
                 _IO.exif_transpose(_Image.open(src)).convert("RGB").save(os.path.join(base, "03_radios", key + ".jpg"), quality=92)
                 placed += 1
             elif cat == "stl":
-                shutil.copy(src, os.path.join(base, "04_stl_bruts", key + ".stl"))
-                placed += 1
+                if _write_model_stl(src, os.path.join(base, "04_stl_bruts", key + ".stl")):
+                    placed += 1
             elif cat == "word":
                 res = WI.parse_word_bilan(src)
                 apply_word_to_record(r, res)
@@ -3839,12 +3851,33 @@ def _save_radio(src, base):
     except Exception:
         return False
 
+def _heic_to_jpg(path):
+    """Convertit un HEIC/HEIF en JPEG via `sips` (natif macOS) — repli quand pillow-heif
+    n'est pas installé. Renvoie le chemin du JPEG temporaire, ou le chemin d'origine si échec."""
+    import tempfile
+    out = os.path.join(tempfile.gettempdir(), "heic_%x.jpg" % (abs(hash(path)) & 0xffffffff))
+    try:
+        subprocess.run(["sips", "-s", "format", "jpeg", path, "--out", out],
+                       capture_output=True, timeout=40)
+        if os.path.exists(out) and os.path.getsize(out) > 0:
+            return out
+    except Exception:
+        pass
+    return path
+
 def _fast_open(path, box=1400):
     """Ouvre une image en décodant à résolution réduite (JPEG DCT) — beaucoup plus rapide
-    sur les gros clichés de 5–6 Mo."""
+    sur les gros clichés de 5–6 Mo. Gère le HEIC iPhone (pillow-heif, sinon `sips`)."""
     from PIL import Image as _I, ImageOps as _IO, ImageFile as _IF
     _IF.LOAD_TRUNCATED_IMAGES = True   # certaines photos de la clé sont légèrement tronquées
-    im = _I.open(path)
+    try:
+        im = _I.open(path)
+    except Exception:
+        # format non reconnu (typiquement HEIC sans décodeur) -> repli sips
+        if path.lower().endswith((".heic", ".heif")):
+            im = _I.open(_heic_to_jpg(path))
+        else:
+            raise
     try: im.draft("RGB", (box, box))
     except Exception: pass
     return _IO.exif_transpose(im).convert("RGB")
@@ -6471,7 +6504,13 @@ def regen(slug, rid):
     if not logged(): return redirect(url_for("login"))
     pt = load_patient(slug); r = load_rec(slug, rid)
     if not pt or not r: abort(404)
-    _regenerate(slug, rid, pt, r); flash("Bilan régénéré.")
+    _regenerate(slug, rid, pt, r)
+    r2 = load_rec(slug, rid) or r
+    if (r2.get("status") == "error"):
+        flash("La régénération a rencontré une erreur — le bilan n'est peut-être pas complet. "
+              "Détail : %s" % (str(r2.get("error", "")) or "voir la fiche"))
+    else:
+        flash("Bilan régénéré.")
     return redirect(url_for("record", slug=slug, rid=rid))
 
 @app.route("/record/<slug>/<rid>/rotate/<slot>")
@@ -7297,6 +7336,21 @@ def _stl_key_from_name(fn):
     if any(w in n for w in ("lower", "inf", "mand", "bas")): return "LowerJawScan"
     return None
 
+def _write_model_stl(src, dst):
+    """Écrit un modèle 3D en .stl à l'emplacement <dst>. Un .stl est copié tel quel ;
+    un .ply/.obj est CONVERTI en .stl (trimesh si dispo) — ne JAMAIS renommer un .ply/.obj
+    en .stl sans conversion (rendu et visionneuse cassés). Renvoie True si un .stl a été écrit."""
+    ext = os.path.splitext(src)[1].lower()
+    if ext == ".stl":
+        try: shutil.copy(src, dst); return True
+        except Exception: return False
+    try:
+        import trimesh
+        trimesh.load(src, force="mesh").export(dst, file_type="stl")
+        return os.path.exists(dst) and os.path.getsize(dst) > 0
+    except Exception:
+        return False
+
 _RADIO_DIR_KW = ("radio", "radiographie", "rx", "pano", "teleradio", "ceph")
 _PHOTO_DIR_KW = ("photo", "cliche", "clich", "intra", "exo", "endo")
 _MODEL_DIR_KW = ("modele", "model", "stl", "empreinte", "scan", "mesh", "3d")
@@ -7415,8 +7469,8 @@ def _build_new_patient_from_drop(stage_dir, fallback_name="", do_regen=True):
     _stl_keys = set()
     for src in stls:
         key = _stl_key_from_name(src) or ("UpperJawScan" if "UpperJawScan" not in _stl_keys else "LowerJawScan")
-        try: shutil.copy(src, os.path.join(base, "04_stl_bruts", key + ".stl")); _stl_keys.add(key)
-        except Exception: pass
+        if _write_model_stl(src, os.path.join(base, "04_stl_bruts", key + ".stl")):
+            _stl_keys.add(key)
     counts["stl"] = len(_stl_keys)
     # 10) finalisation
     r = load_rec(slug, rid); r["crops"] = {}; r["rotations"] = {}

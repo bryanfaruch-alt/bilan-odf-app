@@ -1,7 +1,7 @@
 {
- "version": "3.15",
- "notes": "Classement photo: classifieur unifie qui apprend de tes corrections (k-NN sur fiches verifiees), interrupteur dans Reglages (eteint par defaut = identique a avant). Menu nettoye, import massif fiabilise, dernier ouvert, blocs d'aide permanents.",
- "ref": "dfd8b6a41022a92913ea376a0f50195f87b6bc75",
+ "version": "3.16",
+ "notes": "Correctifs: photos iPhone HEIC ne disparaissent plus (sips), recherche et filtres ne s'effacent plus mutuellement, PLY/OBJ convertis en STL (plus de rendu casse), message 'regenere' honnete en cas d'erreur.",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",
