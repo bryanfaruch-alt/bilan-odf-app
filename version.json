@@ -1,7 +1,7 @@
 {
  "version": "3.15",
  "notes": "Classement photo: classifieur unifie qui apprend de tes corrections (k-NN sur fiches verifiees), interrupteur dans Reglages (eteint par defaut = identique a avant). Menu nettoye, import massif fiabilise, dernier ouvert, blocs d'aide permanents.",
- "ref": "",
+ "ref": "dfd8b6a41022a92913ea376a0f50195f87b6bc75",
  "files": [
   "app.py",
   "run_native.py",
