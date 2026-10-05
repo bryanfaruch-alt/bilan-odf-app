@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.14"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.15"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -3906,49 +3906,149 @@ def _view_feat(path):
                 vec.append(float(M[i * 32:(i + 1) * 32, j * 32:(j + 1) * 32].mean()))
     return _np.array(vec, dtype=float)
 
-_VIEW_CEN = None   # (centroids[8], mu, sd) appris ; False si pas assez d'exemples
-def _get_view_centroids():
-    """Construit (une fois) les centroïdes de chaque vue à partir des photos DÉJÀ classées
-    par l'utilisateur (01_photos_brutes/<vue>.jpg de toutes ses fiches). Renvoie None si
-    l'utilisateur n'a pas encore assez d'exemples (-> repli sur les règles)."""
-    # v3.2 : APPRENTISSAGE DÉSACTIVÉ. Les centroïdes étaient appris sur les fiches "validées",
-    # dont beaucoup avaient été mal classées par l'ancien importateur -> l'apprentissage était
-    # pollué et re-mélangeait chaque nouvel import. On s'appuie désormais uniquement sur les
-    # règles (robustes et prévisibles). Pour réactiver un jour : enlever la ligne ci-dessous.
-    return None
-    global _VIEW_CEN
-    if _VIEW_CEN is not None:
-        return _VIEW_CEN or None
-    import numpy as _np
-    views = [k for k, _ in PHOTO_FIELDS]; vidx = {v: i for i, v in enumerate(views)}
-    feats = [[] for _ in range(8)]
+# ======================================================================
+#  APPRENTISSAGE DU CLASSEMENT PHOTO (v3.15)
+#  Un seul magasin d'exemples, alimenté par les corrections manuelles de
+#  l'utilisateur (fiches "vérifiées"). Fichier : photo_train.jsonl (1 ligne
+#  par slug+rid+vue). Anti-pollution : on n'apprend QUE sur les fiches vérifiées,
+#  en UPSERT (une correction remplace la ligne précédente, pas de doublon), et
+#  tant qu'il n'y a pas assez d'exemples -> on reste 100 % sur les règles.
+# ======================================================================
+_VIEW_CEN = None   # (centroids[8], mu, sd) appris ; None si pas assez d'exemples
+_TRAIN_MTIME = None
+_TRAIN_BYVIEW = None
+_INTRA_VIEWS = ("endo_occlusion_frontale", "endo_laterale_droite", "endo_laterale_gauche",
+                "endo_occlusal_maxillaire", "endo_occlusal_mandibulaire")
+_MIN_EX_PER_INTRA = 3   # seuil avant d'activer l'appris (sinon règles pures)
+
+def _photo_train_path():
+    return os.path.join(DATA, "photo_train.jsonl")
+
+def _learn_record(slug, rid):
+    """UPSERT : enregistre l'empreinte visuelle des photos actuellement placées d'une fiche
+    (une ligne par vue présente dans 01_photos_brutes). Appelé après chaque correction
+    manuelle. Remplace les lignes existantes de cette fiche -> pas de doublon ni de pollution."""
+    global _VIEW_CEN, _TRAIN_MTIME, _TRAIN_BYVIEW
+    try:
+        braw = os.path.join(rdir(slug, rid), "01_photos_brutes")
+        path = _photo_train_path(); rows = []
+        if os.path.exists(path):
+            for line in open(path, encoding="utf-8"):
+                line = line.strip()
+                if not line: continue
+                try: o = json.loads(line)
+                except Exception: continue
+                if o.get("slug") == slug and o.get("rid") == rid:
+                    continue   # on retire les anciennes lignes de cette fiche (upsert)
+                rows.append(o)
+        for v, _lbl in PHOTO_FIELDS:
+            p = os.path.join(braw, v + ".jpg")
+            if os.path.exists(p):
+                try: rows.append({"slug": slug, "rid": rid, "view": v, "vec": _view_feat(p).tolist()})
+                except Exception: pass
+        os.makedirs(DATA, exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            for o in rows: f.write(json.dumps(o) + "\n")
+        os.replace(tmp, path)
+    except Exception:
+        pass
+    _VIEW_CEN = None; _TRAIN_MTIME = None; _TRAIN_BYVIEW = None   # invalide les caches
+
+def _rebuild_train():
+    """Reconstruit tout le magasin d'exemples à partir de TOUTES les fiches vérifiées
+    (bouton 'recalibrer'). Renvoie (nb_fiches, nb_exemples)."""
+    global _VIEW_CEN, _TRAIN_MTIME, _TRAIN_BYVIEW
+    rows = []; nrec = 0
     try:
         for slug in os.listdir(PATIENTS):
             rd = os.path.join(PATIENTS, slug, "records")
             if not os.path.isdir(rd): continue
             for rid in os.listdir(rd):
-                braw = os.path.join(rd, rid, "01_photos_brutes")
-                if not os.path.isdir(braw): continue
-                # N'apprendre QUE sur les fiches validees par l'utilisateur
-                # (sinon le systeme apprend ses propres erreurs de classement auto).
+                meta = os.path.join(rd, rid, "meta.json")
                 try:
-                    if not json.load(open(os.path.join(rd, rid, "meta.json"), encoding="utf-8")).get("photos_verified"):
-                        continue
+                    if not json.load(open(meta, encoding="utf-8")).get("photos_verified"): continue
                 except Exception:
                     continue
-                for v in views:
+                braw = os.path.join(rd, rid, "01_photos_brutes"); got = False
+                for v, _lbl in PHOTO_FIELDS:
                     p = os.path.join(braw, v + ".jpg")
                     if os.path.exists(p):
-                        try: feats[vidx[v]].append(_view_feat(p))
+                        try: rows.append({"slug": slug, "rid": rid, "view": v, "vec": _view_feat(p).tolist()}); got = True
                         except Exception: pass
+                if got: nrec += 1
     except Exception:
+        pass
+    try:
+        os.makedirs(DATA, exist_ok=True)
+        tmp = _photo_train_path() + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            for o in rows: f.write(json.dumps(o) + "\n")
+        os.replace(tmp, _photo_train_path())
+    except Exception:
+        pass
+    _VIEW_CEN = None; _TRAIN_MTIME = None; _TRAIN_BYVIEW = None
+    return nrec, len(rows)
+
+def _train_byview():
+    """Charge le magasin groupé par vue (avec cache sur mtime)."""
+    global _TRAIN_MTIME, _TRAIN_BYVIEW
+    path = _photo_train_path()
+    try: mt = os.path.getmtime(path)
+    except Exception: mt = None
+    if _TRAIN_MTIME == mt and _TRAIN_BYVIEW is not None:
+        return _TRAIN_BYVIEW
+    bv = {k: [] for k, _ in PHOTO_FIELDS}
+    if mt is not None:
+        try:
+            for line in open(path, encoding="utf-8"):
+                line = line.strip()
+                if not line: continue
+                try: o = json.loads(line)
+                except Exception: continue
+                v = o.get("view"); vec = o.get("vec")
+                if v in bv and isinstance(vec, list): bv[v].append(vec)
+        except Exception:
+            pass
+    _TRAIN_MTIME = mt; _TRAIN_BYVIEW = bv
+    return bv
+
+def _train_counts():
+    bv = _train_byview()
+    return {v: len(bv.get(v, [])) for v, _ in PHOTO_FIELDS}
+
+def _photo_learn_on():
+    """L'apprentissage n'est ACTIF que si l'utilisateur l'a activé dans les réglages.
+    Par défaut OFF -> classement 100 % par règles (comportement validé). Les exemples sont
+    tout de même collectés en continu, prêts pour quand on active."""
+    try: return bool(get_settings().get("photo_learn_enabled"))
+    except Exception: return False
+
+def _get_view_centroids():
+    """Centroïdes appris par vue, à partir du magasin d'exemples (fiches vérifiées).
+    Renvoie (cent[8], mu, sd), ou None si l'apprentissage est éteint OU s'il n'y a pas
+    encore assez d'exemples sur les vues INTRA -> repli 100 % règles."""
+    global _VIEW_CEN
+    if not _photo_learn_on():
+        return None
+    if _VIEW_CEN is not None:
+        return _VIEW_CEN or None
+    import numpy as _np
+    bv = _train_byview()
+    views = [k for k, _ in PHOTO_FIELDS]
+    if any(len(bv.get(v, [])) < _MIN_EX_PER_INTRA for v in _INTRA_VIEWS):
         _VIEW_CEN = False; return None
-    if any(len(feats[c]) < 4 for c in range(8)):   # pas assez d'exemples sur au moins une vue
+    allf = _np.array([vec for v in views for vec in bv.get(v, [])]) if any(bv.get(v) for v in views) else None
+    if allf is None or len(allf) < 8:
         _VIEW_CEN = False; return None
-    allf = _np.array([f for lst in feats for f in lst])
     mu = allf.mean(0); sd = allf.std(0) + 1e-6
-    cent = _np.array([((_np.array(feats[c]) - mu) / sd).mean(0) for c in range(8)])
-    _VIEW_CEN = (cent, mu, sd)
+    cent = []; EX = {}
+    for i, v in enumerate(views):
+        lst = bv.get(v, [])
+        ex = ((_np.array(lst) - mu) / sd) if lst else _np.zeros((0, allf.shape[1]))
+        EX[i] = ex
+        cent.append(ex.mean(0) if len(ex) else _np.zeros(allf.shape[1]))
+    _VIEW_CEN = (_np.array(cent), mu, sd, EX)   # EX : exemples normalisés par vue (pour le k-NN)
     return _VIEW_CEN
 
 def _is_radio_feat(x):
@@ -3991,15 +4091,28 @@ def _classify_learned(paths, cen):
     """Classe via les centroïdes appris + affectation 1-à-1, puis réordonne les visages par règle.
     Renvoie (photos{vue:chemin}, radios[], renders[]) ou None si non applicable."""
     import numpy as _np
-    cent, mu, sd = cen
+    cent, mu, sd, EX = cen
     views = [k for k, _ in PHOTO_FIELDS]; vidx = {v: i for i, v in enumerate(views)}
     RE, SO, PR = vidx["exo_face_repos"], vidx["exo_face_sourire"], vidx["exo_profil"]
     aux = {p: _clin_feats(p) for p in paths}
     radios = [p for p in paths if _is_radio_feat(aux[p])]
-    clin = [p for p in paths if p not in radios]
+    # rendus 3D (captures de modèles) exclus des vues cliniques, comme dans le chemin règles
+    renders = [p for p in paths if p not in radios and
+               ((aux[p]["muc"] < 0.15 and aux[p]["asym"] < 0.15) or aux[p].get("black", 0) > 0.60)]
+    clin = [p for p in paths if p not in radios and p not in renders]
     if not clin: return None
     vecs = {p: (_view_feat(p) - mu) / sd for p in clin}
-    D = {(p, c): float(_np.linalg.norm(vecs[p] - cent[c])) for p in clin for c in range(8)}
+    # DISTANCE k-NN : moyenne des k plus proches exemples de la vue (robuste à la variété
+    # inter-patients, bien mieux que la distance au centroïde unique). Repli centroïde si
+    # une vue a trop peu d'exemples.
+    def _dist(p, c):
+        ex = EX.get(c)
+        if ex is None or len(ex) == 0:
+            return float(_np.linalg.norm(vecs[p] - cent[c]))
+        d = _np.linalg.norm(ex - vecs[p], axis=1)
+        k = min(5, len(d))
+        return float(_np.partition(d, k - 1)[:k].mean())
+    D = {(p, c): _dist(p, c) for p in clin for c in range(8)}
     # Barriere anti-confusion visage/intra-oral, robuste a la couleur de peau : split relatif
     # (ecart de muqueuse) au lieu d'un seuil absolu qui ratait les peaux/levres rougeaudes.
     FACE_SLOTS = {RE, SO, PR}; INTRA_SLOTS = set(range(8)) - FACE_SLOTS
@@ -4025,12 +4138,12 @@ def _classify_learned(paths, cen):
         pf = max(face_cands, key=lambda p: aux[p]["asym"] + abs(aux[p]["lft"] - aux[p]["rgt"]))
         pred[pf] = PR
         frontals = sorted([p for p in face_cands if p != pf], key=lambda p: aux[p]["asym"])[:2]
-        fr = sorted(frontals, key=lambda p: aux[p]["midteeth"], reverse=True)
+        fr = sorted(frontals, key=lambda p: aux[p].get("smile", 0), reverse=True)
         if len(fr) >= 1: pred[fr[0]] = SO
         if len(fr) >= 2: pred[fr[1]] = RE
     photos = {views[c]: p for p, c in pred.items()}
     radlist = sorted(radios, key=lambda p: aux[p]["aspect"])[:2]
-    return photos, radlist, []
+    return photos, radlist, renders
 
 def _classify_photo_set(paths):
     """Classe un JEU PROPRE de photos de bilan vers les 8 vues + radios.
@@ -5307,24 +5420,34 @@ def reglages():
       <h3 style="margin:14px 0 4px;color:var(--acc);font-size:14px">Sauvegardes disponibles</h3>
       %s
     </div>""") % (aes_note, url_for("backup_create"), rows)
-    # --- reconnaissance photo (IA locale auto-apprise) ---
-    pm = st.get("photo_model") or {}
-    model_exists = os.path.exists(os.path.join(DATA, "photo_model.npz"))
-    if pm:
-        det = "".join("%s : %d · " % (dict(PHOTO_FIELDS).get(k, k), v) for k, v in sorted(pm.get("counts", {}).items()))
-        status = ('<div class=flash style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35)">Modèle actif — calibré le <b>%s</b> sur '
-                  '<b>%d photos</b>, fiabilité estimée <b>%d%%</b> (validation croisée).<div class=muted style="font-size:12px;margin-top:4px">%s</div></div>'
-                  ) % (pm.get("when", "?"), pm.get("n", 0), round(pm.get("acc", 0) * 100), det.rstrip(" ·"))
-    elif model_exists:
-        status = '<div class=flash style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35)">Un modèle est actif.</div>'
+    # --- reconnaissance photo (IA locale auto-apprise à partir des corrections) ---
+    cnt = _train_counts(); nex = sum(cnt.values())
+    nactive = not any(cnt.get(v, 0) < _MIN_EX_PER_INTRA for v in _INTRA_VIEWS) and nex >= 8
+    det = "".join("%s : %d · " % (dict(PHOTO_FIELDS).get(k, k), v) for k, v in cnt.items() if v)
+    if nex == 0:
+        status = '<p class=muted>Aucun exemple pour l\'instant — l\'app classe avec ses règles. Dès que tu corriges/valides des bilans, elle apprend de tes photos.</p>'
+    elif nactive:
+        status = ('<div class=flash style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35)">Apprentissage <b>actif</b> — '
+                  '<b>%d exemple(s)</b> issus de tes fiches vérifiées. Le classement s\'appuie sur tes propres photos rangées.'
+                  '<div class=muted style="font-size:12px;margin-top:4px">%s</div></div>') % (nex, det.rstrip(" ·"))
     else:
-        status = '<p class=muted>Aucune calibration pour l\'instant — l\'app utilise des règles génériques (parfois imprécises sur les vues endobuccales).</p>'
-    ia_card = ("""<div class=card><h2>Reconnaissance des photos (IA locale)</h2>
-      <p class=muted style="margin:0 0 6px">Améliore le classement automatique de l'import « tout auto » en apprenant sur <b>tes propres photos déjà rangées</b>
-      (aucune donnée ne quitte ton Mac, rien à copier). Relance-la de temps en temps, surtout après avoir ajouté ou corrigé des photos.</p>
-      %s
-      <form method=post action="%s"><button class=btn onclick="this.innerHTML='<span class=spin></span> Calibration…'">Recalibrer la reconnaissance maintenant</button></form>
-    </div>""") % (status, url_for("recalibrate"))
+        status = ('<div class=flash style="background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.4)">En apprentissage — '
+                  '<b>%d exemple(s)</b> pour l\'instant. Encore quelques vues endobuccales à couvrir et l\'appris s\'activera '
+                  '(règles seules d\'ici là).<div class=muted style="font-size:12px;margin-top:4px">%s</div></div>') % (nex, det.rstrip(" ·"))
+    learn_on = bool(st.get("photo_learn_enabled"))
+    toggle = ('<form method=post action="%s" style="display:inline"><button class="btn %s">%s</button></form>'
+              ) % (url_for("photo_learn_toggle"), ("" if learn_on else "sec"),
+                   ("Désactiver l'apprentissage" if learn_on else "Activer l'apprentissage"))
+    onoff = ('<div style="margin:0 0 8px;font-weight:700;color:%s">Apprentissage : %s</div>'
+             ) % (("#169d5b" if learn_on else "#b4572a"), ("ACTIVÉ" if learn_on else "éteint (règles seules)"))
+    ia_card = ("""<div class=card><h2>Reconnaissance des photos (IA locale auto-apprise)</h2>
+      <p class=muted style="margin:0 0 6px">Le classement automatique peut apprendre <b>de tes corrections</b> : chaque fois que tu déplaces,
+      assignes ou valides une photo, l'app retient à quoi ressemble chaque vue (rien ne quitte ton Mac). Les exemples se collectent
+      en continu ; l'apprentissage ne s'applique au classement que lorsqu'il est <b>activé</b> ci-dessous.</p>
+      %s%s
+      <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">%s
+      <form method=post action="%s" style="display:inline"><button class="btn sec" onclick="this.innerHTML='<span class=spin></span> Reconstruction…'">Reconstruire la base d'apprentissage</button></form></div>
+    </div>""") % (onoff, status, toggle, url_for("recalibrate"))
     # --- calibrage du recadrage (marges + redressement) ---
     cc = st.get("crop_calib") or {}
     FAML = {"exo": "Exobuccales", "endo": "Endobuccales", "occlusal": "Occlusales"}
@@ -5485,20 +5608,45 @@ def backup_restore():
 # ---- Reconnaissance des photos : calibration sur les photos déjà rangées ----
 @app.route("/recalibrate", methods=["POST"])
 def recalibrate():
+    """Reconstruit le magasin d'exemples unifié à partir de toutes les fiches vérifiées
+    (le classement apprend normalement tout seul à chaque correction ; ce bouton permet
+    de repartir d'une base saine)."""
     if not logged(): return redirect(url_for("login"))
     try:
-        rep = P.train_photo_model(PATIENTS, os.path.join(DATA, "photo_model.npz"))
+        nrec, nex = _rebuild_train()
     except Exception as e:
         flash("Échec de la calibration : %s" % e); return redirect(url_for("reglages"))
-    if rep.get("ok"):
-        st = get_settings()
-        st["photo_model"] = {"n": rep["n"], "acc": rep["acc"], "counts": rep.get("counts", {}),
-                             "when": datetime.datetime.now().strftime("%d/%m/%Y %H:%M")}
-        save_settings(st)
-        flash("Reconnaissance calibrée sur %d photos déjà rangées — fiabilité estimée %d%% (validation croisée)."
-              % (rep["n"], round(rep["acc"] * 100)))
+    st = get_settings()
+    st["photo_train"] = {"recs": nrec, "n": nex, "counts": _train_counts(),
+                         "when": datetime.datetime.now().strftime("%d/%m/%Y %H:%M")}
+    save_settings(st)
+    need = any(_train_counts().get(v, 0) < _MIN_EX_PER_INTRA for v in _INTRA_VIEWS)
+    if nex == 0:
+        flash("Aucune fiche vérifiée pour l'instant — le classement reste sur les règles. "
+              "Corrige/valide quelques bilans et il apprendra de lui-même.")
+    elif need:
+        flash("Base reconstruite : %d exemple(s) sur %d fiche(s) vérifiée(s). Encore un peu "
+              "d'exemples sur certaines vues endobuccales et l'apprentissage s'activera." % (nex, nrec))
     else:
-        flash(rep.get("msg", "Pas assez de photos déjà rangées pour calibrer."))
+        flash("Apprentissage actif : %d exemple(s) sur %d fiche(s) vérifiée(s). Le classement "
+              "s'appuie désormais sur tes propres photos rangées." % (nex, nrec))
+    return redirect(url_for("reglages"))
+
+@app.route("/photo_learn_toggle", methods=["POST"])
+def photo_learn_toggle():
+    """Active / désactive l'apprentissage du classement photo."""
+    global _VIEW_CEN
+    if not logged(): return redirect(url_for("login"))
+    st = get_settings()
+    st["photo_learn_enabled"] = not bool(st.get("photo_learn_enabled"))
+    save_settings(st)
+    _VIEW_CEN = None   # réévalue au prochain classement
+    if st["photo_learn_enabled"]:
+        c = _train_counts(); need = any(c.get(v, 0) < _MIN_EX_PER_INTRA for v in _INTRA_VIEWS)
+        flash("Apprentissage activé." + ("" if not need else
+              " (Il reste peu d'exemples sur certaines vues : le classement reste sur les règles d'ici là.)"))
+    else:
+        flash("Apprentissage désactivé — classement par règles uniquement.")
     return redirect(url_for("reglages"))
 
 def auto_crop_calib():
@@ -6944,6 +7092,7 @@ def orient_slot(slug, rid, slot, op):
     r["photos_verified"] = True
     _render_slot(base, slot, c)
     save_rec(slug, rid, r)
+    _learn_record(slug, rid)
     return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
 
 
@@ -6990,6 +7139,7 @@ def reassign_photo(slug, rid, slot):
             except Exception: pass
     r["photos_verified"] = True
     save_rec(slug, rid, r)
+    _learn_record(slug, rid)        # apprend de cette correction (fiche vérifiée)
     _regenerate(slug, rid, pt, r, skip_stl=True)
     flash(msg)
     return redirect(url_for("record", slug=slug, rid=rid))
@@ -7012,6 +7162,7 @@ def clear_view(slug, rid, view):
     r.setdefault("rotations", {}).pop(view, None)
     r["photos_verified"] = True
     save_rec(slug, rid, r)
+    _learn_record(slug, rid)
     flash("Photo retirée de « %s » (elle reste dans la galerie ci-dessous)." % dict(PHOTO_FIELDS).get(view, view))
     return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
 
@@ -7034,6 +7185,7 @@ def assign_photo(slug, rid):
     r["crops"].pop(view, None); r["rotations"].pop(view, None)
     r["photos_verified"] = True
     save_rec(slug, rid, r)
+    _learn_record(slug, rid)
     flash("Photo assignée à « %s » (recadrage possible avec l'outil ✂)." % dict(PHOTO_FIELDS).get(view, view))
     return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
 
