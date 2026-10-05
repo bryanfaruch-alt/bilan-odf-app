@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.13"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.14"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2450,6 +2450,7 @@ def patient(slug):
     if not logged(): return redirect(url_for("login"))
     pt = load_patient(slug)
     if not pt: abort(404)
+    _touch_opened(slug)
     # enregistrements triés par date (récent en haut) — permet d'intercaler par la date
     recs_sorted = sorted([(rid, load_rec(slug, rid)) for rid in pt.get("records", [])],
                          key=lambda x: (x[1] or {}).get("date", ""), reverse=True)
@@ -5545,6 +5546,7 @@ def evolution(slug):
     if not logged(): return redirect(url_for("login"))
     pt = load_patient(slug)
     if not pt: abort(404)
+    _touch_opened(slug)
     all_recs = [(rid, load_rec(slug, rid)) for rid in pt.get("records", [])]
     all_recs = [(rid, r) for rid, r in all_recs if r]
     def _evo_order(item):
@@ -5697,6 +5699,7 @@ def record(slug, rid):
     if not logged(): return redirect(url_for("login"))
     pt = load_patient(slug); r = load_rec(slug, rid)
     if not pt or not r: abort(404)
+    _touch_opened(slug)
     base = rdir(slug, rid)
     def u(p): return url_for("rfile", slug=slug, rid=rid, path=p)
     def ex_(p): return os.path.exists(os.path.join(base, p))
