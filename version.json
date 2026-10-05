@@ -1,7 +1,7 @@
 {
  "version": "3.15",
  "notes": "Classement photo: classifieur unifie qui apprend de tes corrections (k-NN sur fiches verifiees), interrupteur dans Reglages (eteint par defaut = regles, identique a avant). +16pts en interne, occlusales x2. Menu/biblio: dernier ouvert fiabilise.",
- "ref": "",
+ "ref": "10c2eeebf6fab85ae659d2babb522ef5726da191",
  "files": [
   "app.py",
   "run_native.py",
