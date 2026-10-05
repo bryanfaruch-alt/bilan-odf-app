@@ -30,7 +30,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.11"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.12"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -1114,7 +1114,7 @@ window.okToast=function(msg){var t=document.getElementById('__oktoast');if(!t){t
 window.copyVal=function(text){try{navigator.clipboard.writeText(text);}catch(e){}okToast('Copie');return false;};
 document.addEventListener('DOMContentLoaded',function(){
   // Flash de succes -> vert + disparition auto (les erreurs .err restent)
-  var f=document.querySelector('.flash:not(.err)');
+  var f=document.querySelector('.flash:not(.err):not(.keep)');
   if(f){var s=f.textContent.toLowerCase();
     if(/(enregistr|ajout|import|supprim|génér|genere|termin|à jour|a jour|cré|cree|mis à jour|effectu|assign|reclass)/.test(s)){f.classList.add('ok');}
     setTimeout(function(){f.classList.add('fade');setTimeout(function(){f.style.display='none';},550);},4500);}
@@ -1923,7 +1923,7 @@ def dashboard():
 def nouveau():
     if not logged(): return redirect(url_for("login"))
     body = ('<h1>Nouveau patient</h1>'
-      '<div class=flash style="background:var(--accw);border-color:var(--line)">Dépose <b>le dossier du patient</b> '
+      '<div class="flash ok keep">Dépose <b>le dossier du patient</b> '
       '(il peut contenir le bilan <b>Word</b>, les <b>photos</b>, les <b>radios</b>, les <b>modèles 3D</b>) — ou simplement son '
       '<b>bilan Word</b> seul. L\'app crée la fiche et range tout automatiquement, puis tu vérifies en un écran.<br>'
       '<span class=muted style="font-size:12.5px">Astuces : un <b>dossier sans Word</b> → la fiche prend le <b>nom du dossier</b>. '
@@ -2865,7 +2865,7 @@ def import_patient():
         return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
     # ---- GET : page « Transfert reçu » ----
     body = ('<h1>Transfert reçu d\'un confrère</h1>'
-      '<div class=flash style="background:var(--accw);border-color:var(--line)">Dépose ce que le confrère t\'a envoyé — '
+      '<div class="flash ok keep">Dépose ce que le confrère t\'a envoyé — '
       'l\'app reconnaît toute seule&nbsp;:<br>'
       '&bull; un <b>fichier ZIP Bilan ODF</b> (« Patient BilanODF… » ou « Dossier ODF… ») → restauré <b>à l\'identique</b>, instantané ;<br>'
       '&bull; un <b>dossier</b> ou un <b>bilan Word</b> (photos, radios, modèles en vrac) → créé et classé automatiquement, comme un nouveau patient.</div>'
