@@ -39,7 +39,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.17"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.18"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2034,8 +2034,10 @@ def nouveau_go():
     if summary["stl"]: parts.append("%d modèle(s) 3D" % summary["stl"])
     tail = (" Les aperçus 3D et le bilan se génèrent en arrière-plan (la fiche se met à jour toute seule)."
             if summary["stl"] else "")
-    flash("Patient « %s » créé — %s. Vérifie le classement ci-dessous : glisse une photo vers une autre vue si besoin.%s" % (
-        summary["nom"], ", ".join(parts), tail))
+    nt = summary.get("temps", 1)
+    temps_txt = (" — %d bilans détectés (1 initial + %d réévaluation(s), par date des photos)" % (nt, nt - 1)) if nt > 1 else ""
+    flash("Patient « %s » créé%s — %s. Vérifie le classement ci-dessous : glisse une photo vers une autre vue si besoin.%s" % (
+        summary["nom"], temps_txt, ", ".join(parts), tail))
     return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
 
 @app.route("/nouveau/bulk")
@@ -7406,49 +7408,162 @@ def _is_radio_filename(fn):
     n = MI._norm(stem)
     return any(k in n for k in _RADIO_NAME_KW)
 
-def _build_new_patient_from_drop(stage_dir, fallback_name="", do_regen=True, regen_async=False):
-    """IMPORT UNIVERSEL d'un NOUVEAU PATIENT depuis un dépôt (dossier avec sous-dossiers, Word, ou vrac).
-    TRI PAR SOUS-DOSSIER ET PAR NOM, robuste au bazar des exports :
-      • un dossier qui contient un .stl = MODÈLES -> les .stl aux modèles, ses images = rendus (captures) ;
-      • un dossier « Radio/RX » OU un nom quasi-numérique (DICOM) / pano·TRP·téléradio = RADIOS ;
-      • un dossier « Photo » ou les autres images = PHOTOS cliniques (classées aux 8 vues, règles v3.3) ;
-      • le .docx = données du bilan (et, s'il n'y a pas de photos dans le dossier, ses images servent aussi).
-    Identité : Word > nom du dossier déposé > fallback. Renvoie (slug, rid, summary)."""
-    from PIL import Image as _I
-    import tempfile
-    # 1) repérer les SOUS-dossiers de MODÈLES (ceux qui contiennent un .stl/.ply/.obj/.3ox).
-    #    NB : jamais la racine du dépôt — sinon, si le dépôt arrive à plat (fichiers tous au même
-    #    niveau), la présence d'un .stl ferait passer TOUTES les images pour des rendus.
-    stage_root = os.path.normpath(stage_dir)
+def _img_date(path):
+    """Date de PRISE DE VUE (EXIF DateTimeOriginal) d'une image — survit à l'upload navigateur,
+    contrairement à la date du fichier. Repli : date du fichier. Sert à regrouper par temps."""
+    try:
+        from PIL import Image as _I
+        ex = (getattr(_I.open(path), "_getexif", lambda: None)() or {})
+        for t in (36867, 36868, 306):   # DateTimeOriginal, DateTimeDigitized, DateTime
+            v = ex.get(t)
+            if v:
+                try: return datetime.datetime.strptime(str(v)[:19], "%Y:%m:%d %H:%M:%S")
+                except Exception: pass
+    except Exception:
+        pass
+    try: return datetime.datetime.fromtimestamp(os.path.getmtime(path))
+    except Exception: return None
+
+def _is_type_dirname(name):
+    """Nom de dossier 'typé' (Photo / Radio / Modèle-Empreinte) -> fait partie du bilan, pas un temps."""
+    n = MI._norm(name)
+    return any(k in n for k in (_PHOTO_DIR_KW + _RADIO_DIR_KW + _MODEL_DIR_KW))
+
+def _dir_has_clinical(d):
+    for _root, _dd, fs in os.walk(d):
+        for f in fs:
+            if f.startswith(".") or f.startswith("~$"): continue
+            if f.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".heic", ".stl", ".ply", ".obj")):
+                return True
+    return False
+
+def _detect_timepoint_dirs(stage_dir):
+    """Sous-dossiers de 1er niveau = TEMPS (réévaluations) : nom NON typé (pas Photo/Radio/Modèle)
+    et contenant des fichiers cliniques. Ex : 'RÉÉVAL 1', 'Contrôle 6 mois', 'T2'."""
+    root = _descend_single(stage_dir)
+    out = []
+    try:
+        for e in sorted(os.listdir(root)):
+            p = os.path.join(root, e)
+            if os.path.isdir(p) and not e.startswith(".") and not _is_type_dirname(e) and _dir_has_clinical(p):
+                out.append(p)
+    except Exception:
+        pass
+    return out
+
+def _bucket_dir(walk_dir, exclude=()):
+    """Inventaire d'un dossier -> (docx, photos_cand, radios_known, renders_known, stls),
+    en ignorant les sous-dossiers 'exclude' (les dossiers de temps quand on fait la BASE)."""
+    excl = set(os.path.normpath(x) for x in exclude)
+    def _skip(rn): return any(rn == x or rn.startswith(x + os.sep) for x in excl)
+    stage_root = os.path.normpath(walk_dir)
     model_dirs = set()
-    for root, _d, fs in os.walk(stage_dir):
-        if os.path.normpath(root) == stage_root:
-            continue
+    for root, _d, fs in os.walk(walk_dir):
+        rn = os.path.normpath(root)
+        if rn == stage_root or _skip(rn): continue
         if any(f.lower().endswith((".stl", ".ply", ".obj", ".3ox")) for f in fs):
-            model_dirs.add(os.path.normpath(root))
-    # 2) inventaire trié par TYPE
-    docx = None; photos_cand = []; radios_known = []; renders_known = []; stls = []
-    for root, _d, fs in os.walk(stage_dir):
-        rootn = os.path.normpath(root)
-        parts = [MI._norm(x) for x in os.path.relpath(root, stage_dir).split(os.sep) if x not in (".", "")]
-        in_model = (rootn in model_dirs) or any(any(k in p for k in _MODEL_DIR_KW) for p in parts)
+            model_dirs.add(rn)
+    docx = None; photos = []; radios = []; renders = []; stls = []
+    for root, _d, fs in os.walk(walk_dir):
+        rn = os.path.normpath(root)
+        if _skip(rn): continue
+        parts = [MI._norm(x) for x in os.path.relpath(root, walk_dir).split(os.sep) if x not in (".", "")]
+        in_model = (rn in model_dirs) or any(any(k in p for k in _MODEL_DIR_KW) for p in parts)
         in_radio = any(any(k in p for k in _RADIO_DIR_KW) for p in parts)
         in_photo = any(any(k in p for k in _PHOTO_DIR_KW) for p in parts)
         for fn in sorted(fs):
-            if fn.startswith(".") or fn.startswith("~$"):
-                continue
+            if fn.startswith(".") or fn.startswith("~$"): continue
             fp = os.path.join(root, fn); ext = os.path.splitext(fn)[1].lower()
             if ext == ".docx":
                 if docx is None: docx = fp
             elif ext in (".stl", ".ply", ".obj"):
                 stls.append(fp)
             elif ext in (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".heic"):
-                if in_model:           renders_known.append(fp)     # image dans un dossier modèle = rendu
-                elif in_radio:         radios_known.append(fp)
-                elif in_photo:         photos_cand.append(fp)
-                elif _is_radio_filename(fn): radios_known.append(fp)
-                else:                  photos_cand.append(fp)
-    # 3) identité (Word > nom du dossier > fallback)
+                if in_model:           renders.append(fp)
+                elif in_radio:         radios.append(fp)
+                elif in_photo:         photos.append(fp)
+                elif _is_radio_filename(fn): radios.append(fp)
+                else:                  photos.append(fp)
+    return docx, photos, radios, renders, stls
+
+def _group_date(bucket):
+    """Date représentative d'un groupe (plus ancienne photo, sinon radio/rendu)."""
+    imgs = (bucket[1] or []) or (bucket[2] or []) or (bucket[3] or [])
+    ds = [d for d in (_img_date(x) for x in imgs) if d]
+    return min(ds) if ds else datetime.datetime.max
+
+def _populate_record(slug, rid, bucket, res=None, do_regen=True, regen_async=False):
+    """Classe et place un bucket (docx, photos, radios, renders, stls) dans la fiche <rid>.
+    Renvoie counts. (Utilisé pour le bilan initial ET chaque réévaluation.)"""
+    from PIL import Image as _I
+    import tempfile
+    docx, photos_cand, radios_known, renders_known, stls = bucket
+    base = rdir(slug, rid)
+    if res:
+        r0 = load_rec(slug, rid); apply_word_to_record(r0, res); save_rec(slug, rid, r0)
+    if len(photos_cand) < 6 and docx:
+        _tmp = tempfile.mkdtemp()
+        try:
+            photos_cand = list(photos_cand) + list(MI.extract_word_media(docx, _tmp))
+            try: photos_cand += _extract_vector_media(docx, _tmp)
+            except Exception: pass
+        except Exception: pass
+    counts = {"photos": 0, "radios": 0, "captures": 0, "stl": 0}
+    try: photos, radios_c, renders_c = _classify_photo_set(photos_cand)
+    except Exception: photos, radios_c, renders_c = {}, [], []
+    for view, src in photos.items():
+        if _place_as_is(src, base, view): counts["photos"] += 1
+    rad_keys = set()
+    for src in list(radios_c) + list(radios_known):
+        if _save_radio(src, base): rad_keys.add(_radio_key(src))
+    counts["radios"] = len(rad_keys)
+    all_renders = list(renders_known) + [x for x in renders_c if x not in set(renders_known)]
+    if all_renders:
+        cap = os.path.join(base, "07_modele_captures"); os.makedirs(cap, exist_ok=True)
+        for i, src in enumerate(all_renders):
+            try:
+                _I.open(src).convert("RGB").save(os.path.join(cap, "capture_%02d.jpg" % i), quality=90)
+                counts["captures"] += 1
+            except Exception: pass
+    _skip = set(radios_c) | set(renders_c)
+    _to_gallery(base, [q for q in photos_cand if q not in _skip])
+    _stl_keys = set()
+    for src in stls:
+        key = _stl_key_from_name(src) or ("UpperJawScan" if "UpperJawScan" not in _stl_keys else "LowerJawScan")
+        if _write_model_stl(src, os.path.join(base, "04_stl_bruts", key + ".stl")):
+            _stl_keys.add(key)
+    counts["stl"] = len(_stl_keys)
+    r = load_rec(slug, rid); r["crops"] = {}; r["rotations"] = {}
+    r["photos_verified"] = True; r["status"] = "processing"
+    save_rec(slug, rid, r)
+    if do_regen:
+        if regen_async:
+            _bg_regenerate(slug, rid, skip_stl=(counts["stl"] == 0))
+        else:
+            try:
+                pt = load_patient(slug); _regenerate(slug, rid, pt, r, skip_stl=(counts["stl"] == 0))
+            except Exception: pass
+    return counts
+
+def _build_new_patient_from_drop(stage_dir, fallback_name="", do_regen=True, regen_async=False):
+    """IMPORT UNIVERSEL d'un patient, MULTI-TEMPS : les sous-dossiers de réévaluation (non typés
+    Photo/Radio/Modèle) deviennent des bilans séparés ; le reste = bilan initial. Les temps sont
+    triés et datés par l'EXIF des photos. Renvoie (slug, rid_initial, summary)."""
+    tps = _detect_timepoint_dirs(stage_dir)
+    base_bucket = _bucket_dir(stage_dir, exclude=tps)
+    tp_buckets = [_bucket_dir(d) for d in tps]
+    # RÈGLE MÉTIER : les RADIOS et les MODÈLES 3D appartiennent au BILAN INITIAL — ils ne sont
+    # faits qu'une fois au bilan, même si leur date diffère des photos. On les retire des temps
+    # (qui ne gardent que leurs photos + rendus) et on les verse tous dans la base/initial.
+    docx, b_ph, b_rad, b_ren, b_stl = base_bucket
+    new_tp = []
+    for (_d2, ph, rad, ren, stl) in tp_buckets:
+        b_rad = b_rad + rad; b_stl = b_stl + stl
+        # pas de Word pour un temps (sinon il se remplit avec les images du bilan initial) :
+        new_tp.append((None, ph, [], ren, []))        # le temps = ses photos (+ rendus) uniquement
+    base_bucket = (docx, b_ph, b_rad, b_ren, b_stl)
+    tp_buckets = new_tp
+    # identité (Word de base > nom du dossier > fallback)
     res = None
     if docx:
         try: res = WI.parse_word_bilan(docx)
@@ -7465,65 +7580,23 @@ def _build_new_patient_from_drop(stage_dir, fallback_name="", do_regen=True, reg
           "sexe": p.get("sexe", "non précisé"), "auteur": _auth,
           "date_creation": datetime.datetime.now().isoformat(timespec="seconds"), "statut": "bilan", "records": []}
     os.makedirs(pdir(slug), exist_ok=True); save_patient(slug, pt)
-    rid = create_empty_record(slug, "Bilan initial")
-    r = load_rec(slug, rid)
-    if res:
-        apply_word_to_record(r, res); save_rec(slug, rid, r)
-    base = rdir(slug, rid)
-    # 4) si le dossier n'a pas (assez) de photos, on utilise les images DU WORD
-    if len(photos_cand) < 6 and docx:
-        _tmp = tempfile.mkdtemp()
-        try:
-            photos_cand = list(photos_cand) + list(MI.extract_word_media(docx, _tmp))
-            try: photos_cand += _extract_vector_media(docx, _tmp)
-            except Exception: pass
-        except Exception:
-            pass
-    # 5) classement des PHOTOS (les radios/rendus mal rangés dans le vrac sont re-séparés ici)
-    counts = {"photos": 0, "radios": 0, "captures": 0, "stl": 0}
-    try:
-        photos, radios_c, renders_c = _classify_photo_set(photos_cand)
-    except Exception:
-        photos, radios_c, renders_c = {}, [], []
-    for view, src in photos.items():
-        if _place_as_is(src, base, view): counts["photos"] += 1
-    # 6) RADIOS : d'abord celles détectées dans le vrac, puis les radios du dossier (prioritaires -> en dernier)
-    rad_keys = set()
-    for src in list(radios_c) + list(radios_known):
-        if _save_radio(src, base):
-            rad_keys.add(_radio_key(src))
-    counts["radios"] = len(rad_keys)
-    # 7) RENDUS 3D -> captures
-    all_renders = list(renders_known) + [x for x in renders_c if x not in set(renders_known)]
-    if all_renders:
-        cap = os.path.join(base, "07_modele_captures"); os.makedirs(cap, exist_ok=True)
-        for i, src in enumerate(all_renders):
-            try:
-                _I.open(src).convert("RGB").save(os.path.join(cap, "capture_%02d.jpg" % i), quality=90)
-                counts["captures"] += 1
-            except Exception: pass
-    # 8) galerie = les photos cliniques candidates (hors radios/rendus re-détectés)
-    _skip = set(radios_c) | set(renders_c)
-    _to_gallery(base, [q for q in photos_cand if q not in _skip])
-    # 9) modèles STL (Upper/Lower d'après le nom, sinon le 1er = Upper, le 2e = Lower)
-    _stl_keys = set()
-    for src in stls:
-        key = _stl_key_from_name(src) or ("UpperJawScan" if "UpperJawScan" not in _stl_keys else "LowerJawScan")
-        if _write_model_stl(src, os.path.join(base, "04_stl_bruts", key + ".stl")):
-            _stl_keys.add(key)
-    counts["stl"] = len(_stl_keys)
-    # 10) finalisation
-    r = load_rec(slug, rid); r["crops"] = {}; r["rotations"] = {}
-    r["photos_verified"] = True; r["status"] = "processing"
-    save_rec(slug, rid, r)
-    if do_regen:   # en IMPORT EN MASSE on saute la génération Word/PDF (trop lourde) -> régénérée à l'ouverture
-        if regen_async:                 # NOUVEAU PATIENT : génération en arrière-plan (rend la main vite)
-            _bg_regenerate(slug, rid, skip_stl=(counts["stl"] == 0))
+    # BILAN INITIAL = la base (toujours en premier, porte radios + modèles + son Word).
+    # RÉÉVALUATIONS = les dossiers de temps, triés par la date EXIF de leurs photos.
+    tp_ordered = [bk for bk in sorted(tp_buckets, key=_group_date)]
+    groups = [(base_bucket, res)] + [(bk, None) for bk in tp_ordered]
+    total = {"photos": 0, "radios": 0, "captures": 0, "stl": 0}; first_rid = None
+    for i, (bucket, gres) in enumerate(groups):
+        if i == 0:
+            label = "Bilan initial"
         else:
-            try: _regenerate(slug, rid, pt, r, skip_stl=(counts["stl"] == 0))
-            except Exception: pass
-    summary = dict(counts, nom=nom, word=bool(res))
-    return slug, rid, summary
+            gd = _group_date(bucket)
+            label = "Réévaluation" + (" %s" % gd.strftime("%m/%Y") if gd != datetime.datetime.max else " %d" % i)
+        rid = create_empty_record(slug, label)
+        if first_rid is None: first_rid = rid
+        c = _populate_record(slug, rid, bucket, res=gres, do_regen=do_regen, regen_async=regen_async)
+        for k in total: total[k] += c.get(k, 0)
+    summary = dict(total, nom=nom, word=bool(res), temps=len(groups))
+    return slug, first_rid, summary
 
 # ---- IMPORT EN MASSE : un dossier qui contient UN SOUS-DOSSIER PAR PATIENT ----
 def _descend_single(root):

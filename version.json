@@ -1,7 +1,7 @@
 {
- "version": "3.17",
- "notes": "Classement: les visages de face ne partent plus en 'captures 3D' (critere peau) -> import complet 8/8 (corrige BAILI ANAS). Import nouveau patient: generation 3D/bilan en arriere-plan, la main est rendue tout de suite et la fiche se met a jour seule.",
- "ref": "a0d426612b6f9afb2a5dc27a984e5d5ff9d8e968",
+ "version": "3.18",
+ "notes": "Import multi-temps: les dossiers de reevaluation deviennent des bilans separes, dates et tries par l'EXIF des photos. Radios et modeles 3D vont TOUJOURS au bilan initial (meme si dates differentes). Teste sur BAILI ANAS: 1 initial (8 vues+radios+modeles) + 2 reevaluations.",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",
