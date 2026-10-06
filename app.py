@@ -39,7 +39,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.16"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.17"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -2021,7 +2021,7 @@ def nouveau_go():
         if pats:
             session["bulk_stage"] = stage
             return redirect(url_for("nouveau_bulk"))
-        slug, rid, summary = _build_new_patient_from_drop(stage, fallback_name=fallback)
+        slug, rid, summary = _build_new_patient_from_drop(stage, fallback_name=fallback, regen_async=True)
     except Exception as e:
         shutil.rmtree(stage, ignore_errors=True)
         flash("Import impossible : %s" % str(e)[:160]); return redirect(url_for("nouveau"))
@@ -2032,8 +2032,10 @@ def nouveau_go():
     if summary["radios"]: parts.append("%d radio(s)" % summary["radios"])
     if summary["captures"]: parts.append("%d capture(s) de modèle" % summary["captures"])
     if summary["stl"]: parts.append("%d modèle(s) 3D" % summary["stl"])
-    flash("Patient « %s » créé — %s. Vérifie le classement ci-dessous : glisse une photo vers une autre vue si besoin." % (
-        summary["nom"], ", ".join(parts)))
+    tail = (" Les aperçus 3D et le bilan se génèrent en arrière-plan (la fiche se met à jour toute seule)."
+            if summary["stl"] else "")
+    flash("Patient « %s » créé — %s. Vérifie le classement ci-dessous : glisse une photo vers une autre vue si besoin.%s" % (
+        summary["nom"], ", ".join(parts), tail))
     return redirect(url_for("record", slug=slug, rid=rid) + "#photos")
 
 @app.route("/nouveau/bulk")
@@ -4131,7 +4133,8 @@ def _classify_learned(paths, cen):
     radios = [p for p in paths if _is_radio_feat(aux[p])]
     # rendus 3D (captures de modèles) exclus des vues cliniques, comme dans le chemin règles
     renders = [p for p in paths if p not in radios and
-               ((aux[p]["muc"] < 0.15 and aux[p]["asym"] < 0.15) or aux[p].get("black", 0) > 0.60)]
+               ((aux[p]["muc"] < 0.15 and aux[p]["asym"] < 0.15 and aux[p].get("skin", 1) < 0.12)
+                or aux[p].get("black", 0) > 0.60)]
     clin = [p for p in paths if p not in radios and p not in renders]
     if not clin: return None
     vecs = {p: (_view_feat(p) - mu) / sd for p in clin}
@@ -4201,7 +4204,11 @@ def _classify_photo_set(paths):
     # Deux cas : (a) arcade de dents SANS muqueuse et SYMÉTRIQUE (muc~0 & asym faible) — couvre
     # les rendus sur fond clair ; (b) fond très noir. Un VISAGE de profil (muc faible mais TRÈS
     # asymétrique) n'est jamais pris pour un rendu.
-    renders = [x for x in nonrad if (x["muc"] < 0.15 and x["asym"] < 0.15) or x.get("black", 0) > 0.60]
+    # un rendu 3D = arcade symétrique SANS peau (muc~0, asym~0, skin~0) ; un VISAGE de face est
+    # aussi symétrique et peu muqueux mais PLEIN de peau -> on exige peu de peau pour ne pas
+    # jeter les visages de face en galerie (bug "il manque repos/sourire").
+    renders = [x for x in nonrad if (x["muc"] < 0.15 and x["asym"] < 0.15 and x.get("skin", 1) < 0.12)
+               or x.get("black", 0) > 0.60]
     nonrad = [x for x in nonrad if x not in renders]
     face_cand, intra = _split_faces_intra(nonrad)
     photos = {}
@@ -5875,6 +5882,13 @@ document.getElementById('evlb').addEventListener('click',function(e){if(e.target
 # ======================================================================
 #  FICHE ENREGISTREMENT (bilan d'un timepoint) — vue + édition
 # ======================================================================
+@app.route("/record/<slug>/<rid>/status")
+def record_status(slug, rid):
+    """État de génération d'une fiche (pour le rafraîchissement auto après un import async)."""
+    if not logged(): return jsonify({"status": "?"})
+    r = load_rec(slug, rid) or {}
+    return jsonify({"status": r.get("status", "?")})
+
 @app.route("/record/<slug>/<rid>")
 def record(slug, rid):
     if not logged(): return redirect(url_for("login"))
@@ -5887,6 +5901,16 @@ def record(slug, rid):
     banner = ""
     if r.get("status") == "error":
         banner = "<div class='flash err'>&#9888; Erreur : %s</div>" % r.get("error", "")
+    elif r.get("status") == "processing":
+        # génération (rendus 3D + bilan) en arrière-plan. On SONDE l'état et on recharge UNE SEULE
+        # fois quand c'est fini -> pas de rechargement intempestif pendant que tu reclasses une photo.
+        banner = ("<div class='flash' id=procban><span class=spin></span> "
+                  "Génération des aperçus 3D et du bilan en cours… (les photos sont déjà prêtes ci-dessous ; "
+                  "cette page se mettra à jour toute seule quand ce sera prêt)</div>"
+                  "<script>(function(){var u='%s';var t=setInterval(function(){"
+                  "fetch(u).then(function(r){return r.json();}).then(function(j){"
+                  "if(j.status&&j.status!=='processing'){clearInterval(t);location.reload();}})"
+                  ".catch(function(){});},4000);})();</script>") % url_for("record_status", slug=slug, rid=rid)
     # barre d'actions
     dl = '<a class=btn href="%s" onclick="return slowGo(this,\'Ouverture du bilan\\u2026\')">&#128196; Voir le bilan</a> ' % url_for("apercu", slug=slug, rid=rid)
     if r.get("docx"): dl += '<a class="btn sec" href="%s">&#8681; Word</a> ' % u(r["docx"])
@@ -6535,6 +6559,22 @@ def _regenerate(slug, rid, pt, r, skip_stl=False):
     r.update({"docx": os.path.basename(docx) if docx else None, "pdf": os.path.basename(pdf) if pdf else None,
               "log": log, "status": "error" if err else "done", "error": err})
     save_rec(slug, rid, r)
+
+def _bg_regenerate(slug, rid, skip_stl=False):
+    """Génère les rendus 3D + Word/PDF en ARRIÈRE-PLAN pour ne pas bloquer l'import (le point
+    le plus lent). La fiche reste en 'processing' puis passe en 'done'/'error' à la fin ; la
+    page de la fiche se rafraîchit automatiquement pour afficher le résultat quand c'est prêt."""
+    import threading
+    def _run():
+        try:
+            pt = load_patient(slug); r = load_rec(slug, rid)
+            if pt and r: _regenerate(slug, rid, pt, r, skip_stl=skip_stl)
+        except Exception:
+            try:
+                r = load_rec(slug, rid)
+                if r: r["status"] = "error"; r["error"] = "génération interrompue"; save_rec(slug, rid, r)
+            except Exception: pass
+    threading.Thread(target=_run, daemon=True).start()
 
 # ---- visualiseur 3D interactif ----
 VIEWER_HTML = """<!doctype html><html lang=fr><head><meta charset=utf-8>
@@ -7366,7 +7406,7 @@ def _is_radio_filename(fn):
     n = MI._norm(stem)
     return any(k in n for k in _RADIO_NAME_KW)
 
-def _build_new_patient_from_drop(stage_dir, fallback_name="", do_regen=True):
+def _build_new_patient_from_drop(stage_dir, fallback_name="", do_regen=True, regen_async=False):
     """IMPORT UNIVERSEL d'un NOUVEAU PATIENT depuis un dépôt (dossier avec sous-dossiers, Word, ou vrac).
     TRI PAR SOUS-DOSSIER ET PAR NOM, robuste au bazar des exports :
       • un dossier qui contient un .stl = MODÈLES -> les .stl aux modèles, ses images = rendus (captures) ;
@@ -7477,8 +7517,11 @@ def _build_new_patient_from_drop(stage_dir, fallback_name="", do_regen=True):
     r["photos_verified"] = True; r["status"] = "processing"
     save_rec(slug, rid, r)
     if do_regen:   # en IMPORT EN MASSE on saute la génération Word/PDF (trop lourde) -> régénérée à l'ouverture
-        try: _regenerate(slug, rid, pt, r, skip_stl=(counts["stl"] == 0))
-        except Exception: pass
+        if regen_async:                 # NOUVEAU PATIENT : génération en arrière-plan (rend la main vite)
+            _bg_regenerate(slug, rid, skip_stl=(counts["stl"] == 0))
+        else:
+            try: _regenerate(slug, rid, pt, r, skip_stl=(counts["stl"] == 0))
+            except Exception: pass
     summary = dict(counts, nom=nom, word=bool(res))
     return slug, rid, summary
 
