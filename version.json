@@ -1,7 +1,7 @@
 {
  "version": "3.18",
  "notes": "Import multi-temps: les dossiers de reevaluation deviennent des bilans separes, dates et tries par l'EXIF des photos. Radios et modeles 3D vont TOUJOURS au bilan initial (meme si dates differentes). Teste sur BAILI ANAS: 1 initial (8 vues+radios+modeles) + 2 reevaluations.",
- "ref": "",
+ "ref": "981745b4d9c9bdf00cdbd95875842a7b8e29737c",
  "files": [
   "app.py",
   "run_native.py",
