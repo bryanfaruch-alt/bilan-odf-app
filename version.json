@@ -1,7 +1,7 @@
 {
  "version": "3.21",
  "notes": "Classement par apprentissage ACTIVE par defaut, avec une base LIVREE (1200+ exemples) : meilleur classement des l import pour toi et tes co-internes (occlusales et frontale tres fiables). + Nouveau bouton Cadre des photos (Auto / Ajuste) en haut de chaque bilan pour afficher les photos en entier (utile pour celles deja recadrees, ex. Word).",
- "ref": "",
+ "ref": "058d5e16b4001ba1686d1546ad1accb1e6f2ed7e",
  "files": [
   "app.py",
   "run_native.py",
