@@ -39,7 +39,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.20"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.21"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -3980,6 +3980,12 @@ _MIN_EX_PER_INTRA = 3   # seuil avant d'activer l'appris (sinon règles pures)
 def _photo_train_path():
     return os.path.join(DATA, "photo_train.jsonl")
 
+def _photo_seed_path():
+    # Base d'apprentissage LIVREE AVEC L'APP (anonymisee : vue + vecteur seulement, aucun
+    # nom patient). Partagee par tous via la MAJ auto -> bon classement des le 1er import.
+    # Le magasin local de l'utilisateur (photo_train.jsonl) s'ajoute par-dessus.
+    return os.path.join(HERE, "photo_train_seed.jsonl")
+
 def _learn_record(slug, rid):
     """UPSERT : enregistre l'empreinte visuelle des photos actuellement placées d'une fiche
     (une ligne par vue présente dans 01_photos_brutes). Appelé après chaque correction
@@ -4047,17 +4053,22 @@ def _rebuild_train():
     return nrec, len(rows)
 
 def _train_byview():
-    """Charge le magasin groupé par vue (avec cache sur mtime)."""
+    # Fusionne la BASE LIVREE (photo_train_seed.jsonl) ET le magasin LOCAL (photo_train.jsonl)
+    # -> le classement appris profite des deux.
     global _TRAIN_MTIME, _TRAIN_BYVIEW
-    path = _photo_train_path()
+    path = _photo_train_path(); seed = _photo_seed_path()
     try: mt = os.path.getmtime(path)
     except Exception: mt = None
-    if _TRAIN_MTIME == mt and _TRAIN_BYVIEW is not None:
+    try: smt = os.path.getmtime(seed)
+    except Exception: smt = None
+    key = (mt, smt)
+    if _TRAIN_MTIME == key and _TRAIN_BYVIEW is not None:
         return _TRAIN_BYVIEW
     bv = {k: [] for k, _ in PHOTO_FIELDS}
-    if mt is not None:
+    for src in (seed, path):   # base livree d'abord, puis corrections locales par-dessus
+        if not os.path.exists(src): continue
         try:
-            for line in open(path, encoding="utf-8"):
+            for line in open(src, encoding="utf-8"):
                 line = line.strip()
                 if not line: continue
                 try: o = json.loads(line)
@@ -4066,7 +4077,7 @@ def _train_byview():
                 if v in bv and isinstance(vec, list): bv[v].append(vec)
         except Exception:
             pass
-    _TRAIN_MTIME = mt; _TRAIN_BYVIEW = bv
+    _TRAIN_MTIME = key; _TRAIN_BYVIEW = bv
     return bv
 
 def _train_counts():
@@ -4074,11 +4085,10 @@ def _train_counts():
     return {v: len(bv.get(v, [])) for v, _ in PHOTO_FIELDS}
 
 def _photo_learn_on():
-    """L'apprentissage n'est ACTIF que si l'utilisateur l'a activé dans les réglages.
-    Par défaut OFF -> classement 100 % par règles (comportement validé). Les exemples sont
-    tout de même collectés en continu, prêts pour quand on active."""
-    try: return bool(get_settings().get("photo_learn_enabled"))
-    except Exception: return False
+    # Apprentissage ACTIF par defaut (une base est livree avec l'app) ; repli regles si trop
+    # peu d'exemples. Desactivable dans les reglages.
+    try: return bool(get_settings().get("photo_learn_enabled", True))
+    except Exception: return True
 
 def _get_view_centroids():
     """Centroïdes appris par vue, à partir du magasin d'exemples (fiches vérifiées).
@@ -6074,10 +6084,23 @@ def record(slug, rid):
         var show=!q||f.indexOf(q)>=0;im.style.display=show?'':'none';if(show)n++;});
       var c=document.getElementById('galcount');if(c)c.textContent=n+' photo'+(n>1?'s':'');}
     </script>"""
+    _fmode = r.get("frames_mode") or "auto"
+    def _rfb(mode, label, title):
+        act = (_fmode == mode)
+        extra = ";border-color:var(--acc);color:var(--acc);font-weight:700;background:var(--accw)" if act else ""
+        return ('<form method=post action="%s" style="display:inline;margin:0">'
+                '<button class="btn sec sm" style="margin:0%s" %s title="%s">%s</button></form>') % (
+                url_for("reframe", slug=slug, rid=rid, mode=mode), extra, ("disabled" if act else ""), title, label)
+    reframe_html = ('<div style="display:flex;align-items:center;gap:8px;margin:2px 0 12px;flex-wrap:wrap">'
+                    '<span class=muted style="font-size:12.5px">Cadre des photos&nbsp;:</span>%s%s'
+                    '<span class=muted style="font-size:11.5px">— « Ajusté » garde la photo enti&egrave;re (photos d&eacute;j&agrave; recadr&eacute;es, ex. Word) ; « Auto » recadre au ratio standard.</span>'
+                    '</div>') % (
+                    _rfb("auto", "Auto", "Cadrage automatique au ratio standard"),
+                    _rfb("asis", "Ajust&eacute; (photo enti&egrave;re)", "Garde chaque photo enti&egrave;re, telle quelle"))
     photos_html = (photos_css + photos_js
                    + '<form id=afForm method=post action="%s"><input type=hidden name=view><input type=hidden name=file></form>' % assign_action
                    + '<form id=arForm method=post action="%s"><input type=hidden name=type><input type=hidden name=file></form>' % assign_radio_action
-                   + slots_html + gallery_block
+                   + reframe_html + slots_html + gallery_block
                    + '<div id=lbov onclick="if(event.target.id==\'lbov\')lbClose()"><a id=lbclose onclick="lbClose()">&times;</a>'
                      '<img id=lbimg src="" alt="Photo agrandie"><div id=lbassign><div style="color:#cfe0ff;text-align:center;margin-top:12px;font-size:13px">Assigner cette photo à une vue :</div>'
                      '<div id=lbbtns>' + lb_buttons + '</div>'
@@ -7164,6 +7187,37 @@ def crop_save(slug, rid, slot):
     _render_slot(rdir(slug, rid), slot, c)         # rend UNIQUEMENT cette photo -> instantané
     save_rec(slug, rid, r)
     return jsonify(ok=True, redirect=url_for("record", slug=slug, rid=rid))
+
+@app.route("/record/<slug>/<rid>/reframe/<mode>", methods=["POST"])
+def reframe(slug, rid, mode):
+    """Bascule le CADRE de TOUTES les photos du bilan d'un coup :
+    - 'auto'  -> cadrage automatique (ratio standard, recadré) ;
+    - 'asis'  -> photo ENTIÈRE, telle quelle (utile pour des photos déjà recadrées, ex. Word).
+    Re-rend chaque vue immédiatement (pas de régénération lourde). Les réglages manuels
+    fins restent possibles ensuite via l'éditeur de recadrage par photo."""
+    if not logged(): return redirect(url_for("login"))
+    pt = load_patient(slug); r = load_rec(slug, rid)
+    if not pt or not r: abort(404)
+    base = rdir(slug, rid); braw = os.path.join(base, "01_photos_brutes")
+    r.setdefault("crops", {})
+    IDENT = {"rot": 0, "fine": 0, "mirror": False, "flip": False, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
+    n = 0
+    for v, _lbl in PHOTO_FIELDS:
+        if not os.path.exists(os.path.join(braw, v + ".jpg")): continue
+        if mode == "asis":
+            c = dict(IDENT)
+        else:
+            try: c = P.default_crop(base, v) or dict(IDENT)
+            except Exception: c = dict(IDENT)
+        r["crops"][v] = c
+        try:
+            if _render_slot(base, v, c): n += 1
+        except Exception: pass
+    r["frames_mode"] = "asis" if mode == "asis" else "auto"
+    save_rec(slug, rid, r)
+    flash("Cadre des photos : %s (%d vue(s)). Clique « Régénérer » si tu veux aussi mettre à jour le bilan Word."
+          % ("photo entière" if mode == "asis" else "automatique", n))
+    return redirect(url_for("record", slug=slug, rid=rid))
 
 def _rotate_file_inplace(path, op):
     try:

@@ -1,7 +1,7 @@
 {
- "version": "3.20",
- "notes": "Photos importees depuis un Word (deja recadrees): elles ne sont plus re-rognees a l import et s affichent EN ENTIER, dans leur propre cadre. Les recadrages manuels restent respectes.",
- "ref": "d62c256428072adf17e98022c70fc6d1b01c873a",
+ "version": "3.21",
+ "notes": "Classement par apprentissage ACTIVE par defaut, avec une base LIVREE (1200+ exemples) : meilleur classement des l import pour toi et tes co-internes (occlusales et frontale tres fiables). + Nouveau bouton Cadre des photos (Auto / Ajuste) en haut de chaque bilan pour afficher les photos en entier (utile pour celles deja recadrees, ex. Word).",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",
@@ -12,6 +12,7 @@
   "appareils_ext.py",
   "bilan_pdf_rl.py",
   "requirements.txt",
+  "photo_train_seed.jsonl",
   "assets/chu_nice.png"
  ]
 }
