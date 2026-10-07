@@ -1,7 +1,7 @@
 {
- "version": "3.18",
- "notes": "Import multi-temps: les dossiers de reevaluation deviennent des bilans separes, dates et tries par l'EXIF des photos. Radios et modeles 3D vont TOUJOURS au bilan initial (meme si dates differentes). Teste sur BAILI ANAS: 1 initial (8 vues+radios+modeles) + 2 reevaluations.",
- "ref": "981745b4d9c9bdf00cdbd95875842a7b8e29737c",
+ "version": "3.19",
+ "notes": "Import plus rapide et robuste: extraction des features + galerie en PARALLELE, et TOLERANT (une photo illisible est ignoree, l'import ne plante plus, quelle que soit l'architecture du dossier). Classement occlusales max/mand nettement ameliore (regle csat+muc): 34->57% et 42->60%.",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",

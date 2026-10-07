@@ -39,7 +39,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.18"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.19"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -3923,6 +3923,25 @@ def _clin_feats(path):
             "lft": float(teeth[:, :60].mean()), "rgt": float(teeth[:, 60:].mean()),
             "midteeth": float(teeth[45:80, 30:90].mean()), "black": black, "smile": smile}
 
+def _safe_clin(p):
+    """Features d'une image, ou None si illisible (jamais d'exception) — robustesse import."""
+    try: return _clin_feats(p)
+    except Exception: return None
+
+def _clin_feats_many(paths):
+    """Features de plusieurs images EN PARALLÈLE (le décodage JPEG est I/O-bound -> gros gain à
+    l'import) et TOLÉRANT : une image corrompue est simplement ignorée, l'import continue."""
+    paths = list(paths)
+    if not paths: return []
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        w = min(8, max(2, len(paths)))
+        with ThreadPoolExecutor(max_workers=w) as ex:
+            res = list(ex.map(_safe_clin, paths))
+    except Exception:
+        res = [_safe_clin(p) for p in paths]
+    return [x for x in res if x is not None]
+
 def _view_feat(path):
     """Vecteur RÉGIONAL (grille 3x3 sur muqueuse/dents/peau/luminance/saturation) : capture la
     DISPOSITION spatiale (palais au centre = occlusal, dents d'un côté = latérale, peau étalée =
@@ -4131,7 +4150,11 @@ def _classify_learned(paths, cen):
     cent, mu, sd, EX = cen
     views = [k for k, _ in PHOTO_FIELDS]; vidx = {v: i for i, v in enumerate(views)}
     RE, SO, PR = vidx["exo_face_repos"], vidx["exo_face_sourire"], vidx["exo_profil"]
-    aux = {p: _clin_feats(p) for p in paths}
+    aux = {}
+    for _p in paths:
+        _f = _safe_clin(_p)
+        if _f is not None: aux[_p] = _f
+    paths = [p for p in paths if p in aux]   # ignore les images illisibles
     radios = [p for p in paths if _is_radio_feat(aux[p])]
     # rendus 3D (captures de modèles) exclus des vues cliniques, comme dans le chemin règles
     renders = [p for p in paths if p not in radios and
@@ -4194,7 +4217,7 @@ def _classify_photo_set(paths):
             if res is not None: return res
         except Exception:
             pass
-    F = [_clin_feats(p) for p in paths]
+    F = _clin_feats_many(paths)   # parallèle + tolérant aux images illisibles
     # RADIOS = quasi pas de muqueuse et peu coloré (niveaux de gris).
     radios = [x for x in F if _is_radio_feat(x)]
     nonrad = [x for x in F if x not in radios]
@@ -4232,7 +4255,9 @@ def _classify_photo_set(paths):
     occ = sorted(intra, key=lambda x: x["cmuc"], reverse=True)[:2]
     rest3 = [x for x in intra if x not in occ]
     if len(occ) >= 2:
-        o = sorted(occ, key=lambda x: x["cR"] - 0.6 * x["csat"], reverse=True)  # occmax = palais (plus clair)
+        # max = arcade PÂLE (palais) ; mand = plus ROUGE/saturée (langue + plancher de bouche).
+        # Mesuré sur la biblio : csat+muc sépare 3x mieux que l'ancien cR-0.6*csat.
+        o = sorted(occ, key=lambda x: x["csat"] + x["muc"])   # le plus pâle d'abord = maxillaire
         photos["endo_occlusal_maxillaire"] = o[0]["p"]; photos["endo_occlusal_mandibulaire"] = o[1]["p"]
     elif occ:
         photos["endo_occlusal_maxillaire"] = occ[0]["p"]
@@ -4247,14 +4272,23 @@ def _classify_photo_set(paths):
 
 def _to_gallery(base, paths):
     """Copie toutes les photos dans 08_galerie (rien n'est perdu ; base de l'assignation manuelle).
-    Réduites à ~1600 px pour rester rapides et légères (largement suffisant pour le bilan)."""
+    Réduites à ~1600 px. EN PARALLÈLE (I/O) et tolérant : une image illisible est simplement sautée."""
     gal = os.path.join(base, "08_galerie"); os.makedirs(gal, exist_ok=True)
     existing = len([f for f in os.listdir(gal) if f.lower().endswith((".jpg", ".jpeg", ".png"))])
-    for i, src in enumerate(paths):
+    def _one(arg):
+        i, src = arg
         try:
             im = _fast_open(src, 1600); im.thumbnail((1600, 1600))
             im.save(os.path.join(gal, "g%03d.jpg" % (existing + i)), quality=85)
         except Exception: pass
+    jobs = list(enumerate(paths))
+    if not jobs: return
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(8, max(2, len(jobs)))) as ex:
+            list(ex.map(_one, jobs))
+    except Exception:
+        for j in jobs: _one(j)
 
 def _auto_faces(clinical_feats):
     """Attribue les 3 vues de visage (fiable) : profil = plus asymétrique ; sourire = plus de dents."""
