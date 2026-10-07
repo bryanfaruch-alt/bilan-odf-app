@@ -1,7 +1,7 @@
 {
  "version": "3.19",
  "notes": "Import plus rapide et robuste: extraction des features + galerie en PARALLELE, et TOLERANT (une photo illisible est ignoree, l'import ne plante plus, quelle que soit l'architecture du dossier). Classement occlusales max/mand nettement ameliore (regle csat+muc): 34->57% et 42->60%.",
- "ref": "",
+ "ref": "78f7bea74c6ae10529e32cae9e322fbcfbc98762",
  "files": [
   "app.py",
   "run_native.py",
