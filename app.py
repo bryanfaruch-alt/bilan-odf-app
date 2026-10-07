@@ -39,7 +39,7 @@ if getattr(sys, "frozen", False):
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
 else:
     HERE = os.path.dirname(os.path.abspath(__file__))
-APP_VERSION = "3.19"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
+APP_VERSION = "3.20"         # version de l'app (source unique : lue aussi par run_native pour la MAJ auto)
 DATA = os.environ.get("BILANODF_DATA") or os.path.expanduser("~/BilanODF_Data")
 PATIENTS = os.path.join(DATA, "patients")
 CONFIG = os.path.join(DATA, "config.json")
@@ -7545,8 +7545,10 @@ def _populate_record(slug, rid, bucket, res=None, do_regen=True, regen_async=Fal
     counts = {"photos": 0, "radios": 0, "captures": 0, "stl": 0}
     try: photos, radios_c, renders_c = _classify_photo_set(photos_cand)
     except Exception: photos, radios_c, renders_c = {}, [], []
+    placed_views = []
     for view, src in photos.items():
-        if _place_as_is(src, base, view): counts["photos"] += 1
+        if _place_as_is(src, base, view):
+            counts["photos"] += 1; placed_views.append(view)
     rad_keys = set()
     for src in list(radios_c) + list(radios_known):
         if _save_radio(src, base): rad_keys.add(_radio_key(src))
@@ -7567,7 +7569,13 @@ def _populate_record(slug, rid, bucket, res=None, do_regen=True, regen_async=Fal
         if _write_model_stl(src, os.path.join(base, "04_stl_bruts", key + ".stl")):
             _stl_keys.add(key)
     counts["stl"] = len(_stl_keys)
-    r = load_rec(slug, rid); r["crops"] = {}; r["rotations"] = {}
+    r = load_rec(slug, rid); r["rotations"] = {}
+    # Photos placees TELLES QUELLES (deja cadrees - ex. extraites d'un Word, donc souvent
+    # recadrees par le praticien) : on fige un recadrage IDENTITE par vue. Ainsi la
+    # regeneration (process_photos) ne force PAS le ratio standard et ne re-rogne pas la photo
+    # (branche crop explicite), elle reste visible EN ENTIER, dans son propre cadre.
+    r["crops"] = {v: {"rot": 0, "fine": 0, "mirror": False, "flip": False,
+                      "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0} for v in placed_views}
     r["photos_verified"] = True; r["status"] = "processing"
     save_rec(slug, rid, r)
     if do_regen:

@@ -1,7 +1,7 @@
 {
- "version": "3.19",
- "notes": "Import plus rapide et robuste: extraction des features + galerie en PARALLELE, et TOLERANT (une photo illisible est ignoree, l'import ne plante plus, quelle que soit l'architecture du dossier). Classement occlusales max/mand nettement ameliore (regle csat+muc): 34->57% et 42->60%.",
- "ref": "78f7bea74c6ae10529e32cae9e322fbcfbc98762",
+ "version": "3.20",
+ "notes": "Photos importees depuis un Word (deja recadrees): elles ne sont plus re-rognees a l import et s affichent EN ENTIER, dans leur propre cadre. Les recadrages manuels restent respectes.",
+ "ref": "",
  "files": [
   "app.py",
   "run_native.py",
